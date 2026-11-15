@@ -1,0 +1,153 @@
+{
+ "pdbId": "8H9S",
+ "atomCount": 38914,
+ "units": "angstrom",
+ "elements": [
+  "C",
+  "MG",
+  "N",
+  "O",
+  "P",
+  "S"
+ ],
+ "chains": [
+  {
+   "id": "1",
+   "subunit": "c"
+  },
+  {
+   "id": "2",
+   "subunit": "c"
+  },
+  {
+   "id": "3",
+   "subunit": "c"
+  },
+  {
+   "id": "4",
+   "subunit": "c"
+  },
+  {
+   "id": "5",
+   "subunit": "c"
+  },
+  {
+   "id": "6",
+   "subunit": "c"
+  },
+  {
+   "id": "7",
+   "subunit": "c"
+  },
+  {
+   "id": "8",
+   "subunit": "c"
+  },
+  {
+   "id": "A",
+   "subunit": "alpha"
+  },
+  {
+   "id": "B",
+   "subunit": "alpha"
+  },
+  {
+   "id": "C",
+   "subunit": "alpha"
+  },
+  {
+   "id": "D",
+   "subunit": "beta"
+  },
+  {
+   "id": "E",
+   "subunit": "beta"
+  },
+  {
+   "id": "F",
+   "subunit": "beta"
+  },
+  {
+   "id": "G",
+   "subunit": "gamma"
+  },
+  {
+   "id": "H",
+   "subunit": "delta"
+  },
+  {
+   "id": "I",
+   "subunit": "epsilon"
+  },
+  {
+   "id": "J",
+   "subunit": "IF1"
+  },
+  {
+   "id": "K",
+   "subunit": "b"
+  },
+  {
+   "id": "L",
+   "subunit": "F6"
+  },
+  {
+   "id": "M",
+   "subunit": "d"
+  },
+  {
+   "id": "N",
+   "subunit": "a"
+  },
+  {
+   "id": "O",
+   "subunit": "OSCP"
+  },
+  {
+   "id": "P",
+   "subunit": "ATP5MJ"
+  },
+  {
+   "id": "Q",
+   "subunit": "A6L"
+  },
+  {
+   "id": "R",
+   "subunit": "f"
+  },
+  {
+   "id": "S",
+   "subunit": "g"
+  },
+  {
+   "id": "T",
+   "subunit": "e"
+  }
+ ],
+ "groups": {
+  "stator": 0,
+  "rotor": 1,
+  "inhibitor": 2,
+  "ligand": 3
+ },
+ "site": {
+  "chain": "D",
+  "position": [
+   18.739,
+   -17.62,
+   -21.24
+  ]
+ },
+ "axis": {
+  "origin": [
+   -23.673,
+   -2.936,
+   82.247
+  ],
+  "direction": [
+   0.16699,
+   0.03389,
+   -0.98538
+  ]
+ }
+}

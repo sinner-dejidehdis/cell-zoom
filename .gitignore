@@ -1,0 +1,6 @@
+node_modules
+dist
+tools/pdb/cache
+*.blend1
+__pycache__
+*.tsbuildinfo
