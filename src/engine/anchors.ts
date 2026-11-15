@@ -117,7 +117,7 @@ function gauss(r: () => number): number {
 }
 
 // Rotation that maps the model's long axis (X) onto the capsule's long axis (Y).
-const MITO_TO_CAPSULE = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+export const MITO_TO_CAPSULE = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
 const Y = new THREE.Vector3(0, 1, 0);
 
 export const CELL_LAYOUT = (() => {
@@ -133,7 +133,66 @@ export const CELL_LAYOUT = (() => {
     (s) => s / 2,
     (p, _q, s) => [{ c: p, r: s / 2 }],
   );
-  return { mitos, granules };
+  // Lysosomes: 0.25-0.5 um, count illustrative (no human beta-cell count found).
+  const lysosomes = scatter(13, 40, (r) => 0.25 + 0.25 * r(), (s) => s / 2, (p, _q, s) => [{ c: p, r: s / 2 }]);
+  return { mitos, granules, lysosomes };
+})();
+
+/** Free ribosomes (~25 nm). Only a sample is drawn: the real number is far larger. */
+export const RIBOSOMES = (() => {
+  const r = rng(17);
+  const out: number[] = [];
+  const p = new THREE.Vector3();
+  while (out.length < 60000 * 3) {
+    p.set((r() * 2 - 1) * BOUND, (r() * 2 - 1) * BOUND, (r() * 2 - 1) * BOUND);
+    if (insideCell(p, 0.05) && clearOfNucleus(p, 0.02)) out.push(p.x, p.y, p.z);
+  }
+  return new Float32Array(out);
+})();
+
+/** Cortical actin: short filaments in a thin layer under the membrane. Illustrative. */
+export const ACTIN = (() => {
+  const r = rng(19);
+  const out: number[] = [];
+  const p = new THREE.Vector3();
+  const t = new THREE.Vector3();
+  while (out.length < 2500 * 6) {
+    p.set((r() * 2 - 1) * BOUND, (r() * 2 - 1) * BOUND, (r() * 2 - 1) * BOUND);
+    if (!insideCell(p, 0.0)) continue;
+    const face = PLANES.find(({ n, d }) => n.dot(p) > d - MEMBRANE_MARGIN - 0.25);
+    if (!face) continue;
+    t.set(r() - 0.5, r() - 0.5, r() - 0.5).projectOnPlane(face.n).normalize().multiplyScalar(0.15 + 0.3 * r());
+    out.push(p.x - t.x, p.y - t.y, p.z - t.z, p.x + t.x, p.y + t.y, p.z + t.z);
+  }
+  return new Float32Array(out);
+})();
+
+/**
+ * The default cut: a plane facing the home view, a little in front of the nucleus centre, so the
+ * nucleus is cut through. Points with dot(CUT.normal, p) > CUT.offset are removed.
+ */
+const CUT_NORMAL = new THREE.Vector3(0.25, 0.1, 1).normalize();
+export const CUT = { normal: CUT_NORMAL, offset: CUT_NORMAL.dot(NUCLEUS) + 0.3 };
+
+/** The cut face: where the cut plane meets the cell (a convex polygon), in cell coordinates. */
+export const CUT_FACE: THREE.Vector3[] = (() => {
+  const n = CUT.normal;
+  const u = new THREE.Vector3(0, 1, 0).cross(n).normalize();
+  const v = n.clone().cross(u);
+  const o = n.clone().multiplyScalar(CUT.offset);
+  let poly = [[-20, -20], [20, -20], [20, 20], [-20, 20]].map(([a, b]) => o.clone().addScaledVector(u, a).addScaledVector(v, b));
+  for (const { n: pn, d } of PLANES) {
+    const lim = d - 0.3; // inside the rounded edges
+    const next: THREE.Vector3[] = [];
+    poly.forEach((a, i) => {
+      const b = poly[(i + 1) % poly.length];
+      const da = pn.dot(a) - lim, db = pn.dot(b) - lim;
+      if (da <= 0) next.push(a);
+      if (da * db < 0) next.push(a.clone().lerp(b, da / (da - db)));
+    });
+    poly = next;
+  }
+  return poly;
 })();
 
 /** Total granule volume as a share of the cell, for the panel text. */

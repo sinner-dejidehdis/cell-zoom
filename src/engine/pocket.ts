@@ -75,3 +75,43 @@ export function withCutaway(material: THREE.Material, clip: typeof nearClip = ne
   material.needsUpdate = true;
   return material;
 }
+
+/**
+ * The plane that cuts the cell open (world coordinates): fragments with dot(n, p) + w > 0 are not drawn.
+ * Set every frame by the cell scene; (0, 0, 0, -1) turns it off.
+ */
+export const cellCut = { uCutPlane: { value: new THREE.Vector4(0, 0, 0, -1) } };
+
+export function cutRemoves(worldPoint: THREE.Vector3): boolean {
+  const c = cellCut.uCutPlane.value;
+  return c.x * worldPoint.x + c.y * worldPoint.y + c.z * worldPoint.z + c.w > 0;
+}
+
+/** Add the cell's cut plane to a material, on top of any patch it already has. Works for meshes,
+ * instanced meshes, points and lines. Cut solids show their inside, so the material becomes two-sided. */
+export function withPlaneCut<T extends THREE.Material>(material: T): T {
+  const prev = material.onBeforeCompile;
+  const prevKey = material.customProgramCacheKey();
+  material.onBeforeCompile = (shader, renderer) => {
+    prev.call(material, shader, renderer);
+    shader.uniforms.uCutPlane = cellCut.uCutPlane;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vPlaneWorld;')
+      .replace(
+        '#include <project_vertex>',
+        `#include <project_vertex>
+        #ifdef USE_INSTANCING
+          vPlaneWorld = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
+        #else
+          vPlaneWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;
+        #endif`,
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vPlaneWorld;\nuniform vec4 uCutPlane;')
+      .replace('void main() {', 'void main() {\n  if (dot(uCutPlane.xyz, vPlaneWorld) + uCutPlane.w > 0.0) discard;');
+  };
+  material.customProgramCacheKey = () => prevKey + '|planecut';
+  if (!(material instanceof THREE.PointsMaterial) && !(material instanceof THREE.LineBasicMaterial)) material.side = THREE.DoubleSide;
+  material.needsUpdate = true;
+  return material;
+}

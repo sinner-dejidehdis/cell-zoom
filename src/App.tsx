@@ -117,6 +117,10 @@ function Viewer() {
               />
               只显示 1/10 的胰岛素颗粒
             </label>
+            <label>
+              <input type="checkbox" checked={sim.cutaway} onChange={(e) => setSim({ cutaway: e.target.checked })} />
+              剖开细胞
+            </label>
           </span>
         )}
         {(level === 'atp-synthase' || level === 'catalytic-site') && (

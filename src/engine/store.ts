@@ -8,9 +8,11 @@ export interface SimState {
   panelOpen: boolean;
   /** Draw only one in ten insulin granules, to see past them. */
   sparseGranules: boolean;
+  /** Cut the cell open with a plane, like a textbook drawing, to show the inside. */
+  cutaway: boolean;
 }
 
-let state: SimState = { playing: true, showInhibitor: false, panelOpen: true, sparseGranules: false };
+let state: SimState = { playing: true, showInhibitor: false, panelOpen: true, sparseGranules: false, cutaway: true };
 const listeners = new Set<() => void>();
 
 export function getSim(): SimState {

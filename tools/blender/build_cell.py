@@ -195,6 +195,8 @@ def sheet(bm, w, h, bend, matrix, nx=18, ny=10, thick=0.05, rim=0.0):
     """A curved, oval sheet (cisterna) about w x h, as a closed slab, added to bm.
     `rim` swells the edge (Golgi cisternae have dilated rims)."""
     verts = {}
+    uvs = {}
+    uv_layer = bm.loops.layers.uv.verify()
     for side, sgn in ((0, -1), (1, 1)):
         for i in range(nx + 1):
             for j in range(ny + 1):
@@ -204,7 +206,9 @@ def sheet(bm, w, h, bend, matrix, nx=18, ny=10, thick=0.05, rim=0.0):
                 u, v = a * w / 2, b * h / 2
                 half = thick / 2 * (1 + rim * rr ** 6) * (0.35 + 0.65 * math.sqrt(max(0.0, 1 - rr ** 8)))
                 z = bend * (u * u) / w + 0.04 * math.sin(3.1 * v + 1.7 * u) + sgn * half
-                verts[side, i, j] = bm.verts.new(matrix @ Vector((u, v, z)))
+                vert = bm.verts.new(matrix @ Vector((u, v, z)))
+                verts[side, i, j] = vert
+                uvs[vert] = (u, v)
     for i in range(nx):
         for j in range(ny):
             a, b, c2, d = (0, i, j), (0, i + 1, j), (0, i + 1, j + 1), (0, i, j + 1)
@@ -219,6 +223,10 @@ def sheet(bm, w, h, bend, matrix, nx=18, ny=10, thick=0.05, rim=0.0):
         for i in (0, nx):
             q = [verts[0, i, j], verts[1, i, j], verts[1, i, j + 1], verts[0, i, j + 1]]
             bm.faces.new(q if i == 0 else q[::-1])
+    for f in bm.faces:
+        for loop in f.loops:
+            if loop.vert in uvs:
+                loop[uv_layer].uv = uvs[loop.vert]
 
 
 def er_and_golgi(planes):
@@ -261,7 +269,7 @@ def er_and_golgi(planes):
                 side = rand.choice((-1, 1))
                 p = m @ Vector((side * (w / 2 + rand.uniform(0.05, 0.18)), rand.uniform(-0.3, 0.3), rand.uniform(-0.1, 0.1)))
                 bmesh.ops.create_icosphere(vbm, subdivisions=1, radius=0.035, matrix=Matrix.Translation(p))
-        exclusions.append({"_c": centre, "_r": 1.0})
+        exclusions.append({"_c": centre, "_r": 1.0, "golgi": True})
     golgi = new_object("Golgi", gbm, golgi_mat)
     smooth(golgi)
     ves = new_object("GolgiVesicles", vbm, vesicle_mat)
@@ -280,7 +288,7 @@ def er_and_golgi(planes):
             if u.dot(golgi_dir) > 0.3:
                 continue
             surf = Vector((u.x * nscale.x, u.y * nscale.y, u.z * nscale.z))
-            centre = nuc + surf + u * 0.45
+            centre = nuc + surf + u * 0.42
             normal = u
         else:
             centre = Vector((rand.uniform(-6, 6), rand.uniform(-6, 6), rand.uniform(-6, 6)))
@@ -291,6 +299,20 @@ def er_and_golgi(planes):
         if not inside_cell(centre, r + 0.2) or not clear_of_nucleus(centre, 0.3 if perinuclear else r) or not clear_of(centre, r):
             continue
         rot = normal.to_track_quat("Z", "Y") @ Quaternion((0, 0, 1), rand.uniform(0, math.pi))
+        if perinuclear:
+            # The outer nuclear membrane is continuous with the ER: join the innermost sheet to the
+            # envelope with a few short necks.
+            layers = 3
+            inner = centre - normal * 0.13
+            for _ in range(4):
+                off = rot @ Vector((rand.uniform(-w / 3, w / 3), rand.uniform(-h / 3, h / 3), 0))
+                a = inner + off
+                q = a - nuc
+                k = 1 / Vector((q.x / nscale.x, q.y / nscale.y, q.z / nscale.z)).length
+                b = nuc + q * k
+                axis = (a - b)
+                m = Matrix.Translation((a + b) / 2) @ axis.normalized().to_track_quat("Z", "Y").to_matrix().to_4x4()
+                bmesh.ops.create_cone(ebm, cap_ends=False, segments=10, radius1=0.045, radius2=0.045, depth=axis.length + 0.04, matrix=m)
         for i in range(layers):
             m = Matrix.Translation(centre + normal * (i - (layers - 1) / 2) * 0.13) @ rot.to_matrix().to_4x4()
             sheet(ebm, w, h, -0.18 if perinuclear else rand.uniform(-0.25, 0.25), m)
@@ -299,7 +321,113 @@ def er_and_golgi(planes):
     er = new_object("RoughER", ebm, er_mat)
     smooth(er)
     print(f"ER stacks: {placed}")
+
+    # Smooth ER: small networks of branching tubules (~60 nm across). Sparse in beta cells; illustrative.
+    smooth_mat = material("smooth_er", (0.36, 0.62, 0.80), roughness=0.5)
+    patches = 0
+    tries = 0
+    while patches < 3 and tries < 2000:
+        tries += 1
+        centre = Vector((rand.uniform(-6, 6), rand.uniform(-6, 6), rand.uniform(-6, 6)))
+        if not inside_cell(centre, 1.3) or not clear_of_nucleus(centre, 1.1) or not clear_of(centre, 1.0):
+            continue
+        nodes = []
+        while len(nodes) < 26:
+            p = Vector((rand.uniform(-1, 1), rand.uniform(-1, 1), rand.uniform(-1, 1))) * 0.9
+            if p.length < 0.9 and all((p - o).length > 0.28 for o in nodes):
+                nodes.append(p)
+        edges = set()
+        for i, a in enumerate(nodes):
+            near = sorted(range(len(nodes)), key=lambda j: (nodes[j] - a).length)[1:4]
+            for j in near[: rand.choice((2, 3))]:
+                edges.add((min(i, j), max(i, j)))
+        curve = bpy.data.curves.new(f"ser_{patches}", "CURVE")
+        curve.dimensions = "3D"
+        for i, j in edges:
+            a, b = centre + nodes[i], centre + nodes[j]
+            mid = (a + b) / 2 + Vector((rand.gauss(0, 0.05), rand.gauss(0, 0.05), rand.gauss(0, 0.05)))
+            sp = curve.splines.new("POLY")
+            sp.points.add(2)
+            for pt, co in zip(sp.points, (a, mid, b)):
+                pt.co = (*co, 1.0)
+        curve.bevel_depth = 0.03
+        curve.bevel_resolution = 1
+        obj = bpy.data.objects.new(f"SmoothER_{patches}", curve)
+        bpy.context.collection.objects.link(obj)
+        bpy.ops.object.select_all(action="DESELECT")
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+        bpy.ops.object.convert(target="MESH")
+        for i in range(len(nodes)):  # round the junctions
+            bm2 = bmesh.new()
+            bmesh.ops.create_icosphere(bm2, subdivisions=1, radius=0.045, matrix=Matrix.Translation(centre + nodes[i]))
+            bm2.to_mesh(me := bpy.data.meshes.new("j"))
+            bm2.free()
+            j = bpy.data.objects.new("j", me)
+            bpy.context.collection.objects.link(j)
+            j.select_set(True)
+        bpy.ops.object.join()
+        smooth(obj)
+        assign(obj, smooth_mat)
+        exclusions.append({"_c": centre, "_r": 1.0})
+        patches += 1
+    print(f"smooth ER patches: {patches}")
     return exclusions
+
+
+# ---- Microtubules ----------------------------------------------------------------------------------
+
+# Microtubules are 25 nm across (a textbook constant). In beta cells they form a non-radial meshwork,
+# much of it nucleated at the Golgi (Zhu et al. 2015 Dev Cell; Mueller et al. 2021 JCB, mouse); their
+# number and paths here are illustrative.
+MT_RADIUS = 0.0125
+
+
+def microtubules(planes, golgi_centre, centriole_at):
+    nuc = to_blender(NUCLEUS_CENTER)
+    rx, ry, rz = NUCLEUS_RADII
+    nscale = Vector((rx, rz, ry))
+    curve = bpy.data.curves.new("microtubules", "CURVE")
+    curve.dimensions = "3D"
+    count = 0
+    for k in range(140):
+        start = (golgi_centre if k % 10 < 7 else centriole_at) + Vector((rand.gauss(0, 0.5), rand.gauss(0, 0.5), rand.gauss(0, 0.5)))
+        d = Vector((rand.gauss(0, 1), rand.gauss(0, 1), rand.gauss(0, 1))).normalized()
+        pts = [start]
+        length = rand.uniform(2.0, 9.0)
+        steps = int(length / 0.15)
+        for _ in range(steps):
+            d = (d + Vector((rand.gauss(0, 0.12), rand.gauss(0, 0.12), rand.gauss(0, 0.12)))).normalized()
+            p = pts[-1] + d * 0.15
+            q = p - nuc
+            if Vector((q.x / (nscale.x + 0.15), q.y / (nscale.y + 0.15), q.z / (nscale.z + 0.15))).length < 1:
+                d = (d + q.normalized() * 0.8).normalized()  # slide around the nucleus
+                p = pts[-1] + d * 0.15
+            out = [(n, dd) for n, dd in planes if n.dot(p) > dd - 0.3]
+            if out:
+                n = out[0][0]
+                d = (d - n * (2 * d.dot(n))).normalized()  # turn along the cortex
+                p = pts[-1] + d * 0.15
+                if any(n2.dot(p) > dd2 - 0.2 for n2, dd2 in planes):
+                    break
+            pts.append(p)
+        if len(pts) < 4:
+            continue
+        sp = curve.splines.new("POLY")
+        sp.points.add(len(pts) - 1)
+        for pt, co in zip(sp.points, pts):
+            pt.co = (*co, 1.0)
+        count += 1
+    curve.bevel_depth = MT_RADIUS
+    curve.bevel_resolution = 0
+    obj = bpy.data.objects.new("Microtubules", curve)
+    bpy.context.collection.objects.link(obj)
+    bpy.ops.object.select_all(action="DESELECT")
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+    bpy.ops.object.convert(target="MESH")
+    assign(obj, material("microtubule", (0.36, 0.56, 0.70), roughness=0.5))
+    print(f"microtubules: {count}")
 
 
 # ---- Primary cilium --------------------------------------------------------------------------------
@@ -308,6 +436,8 @@ def cilium(planes):
     """The cilium leaves the cell through the apical face (+Z in Blender, +Y on the site)."""
     n, d = max(planes, key=lambda pd: pd[0].z)
     base = n * (d - 0.35)
+    shift = Vector((0, 1.6, 0))  # toward the back (site -Z), so the default cut-away keeps it
+    base = base + (shift - n * shift.dot(n))
     bm = bmesh.new()
     pts = []
     for i in range(41):
@@ -350,6 +480,8 @@ def main() -> None:
     nucleus()
     exclusions = er_and_golgi(planes)
     cil, centriole_at = cilium(planes)
+    golgi_centre = sum((e["_c"] for e in exclusions if e.get("golgi")), Vector()) / 3
+    microtubules(planes, golgi_centre, centriole_at)
     exclusions.append({"_c": centriole_at, "_r": 0.5})
     OUT.parent.mkdir(parents=True, exist_ok=True)
     export_glb(str(OUT))
