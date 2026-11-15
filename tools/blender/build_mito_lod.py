@@ -25,8 +25,8 @@ OUT = Path(__file__).resolve().parents[2] / "public" / "models" / "mitochondrion
 
 RADIUS = 4.0
 HALF_LENGTH = 6.0
-GAP = 0.22
-CRISTA_HALF_THICKNESS = 0.14
+GAP = 0.26  # 13 nm between bilayer centres, as in the detailed model
+CRISTA_HALF_THICKNESS = 0.39  # 39 nm crista: 25 nm lumen + two 7 nm bilayers
 CRISTA_XS = [-8.4, -6.3, -4.2, -2.1, 0.0, 2.1, 4.2, 6.3, 8.4]
 
 
@@ -55,15 +55,15 @@ def main() -> None:
     inner_mat = material("inner_membrane", (0.86, 0.36, 0.30), roughness=0.5)
     inner = capsule("Inner", RADIUS - GAP, HALF_LENGTH)
     assign(inner, inner_mat)
-    matrix = capsule("Matrix", RADIUS - GAP - 0.05, HALF_LENGTH, 20, 10)
+    matrix = capsule("Matrix", RADIUS - GAP - 0.4, HALF_LENGTH, 20, 10)
 
     parts = [inner]
     for i, x in enumerate(CRISTA_XS):
         side = 1 if i % 2 == 0 else -1
-        bpy.ops.mesh.primitive_uv_sphere_add(segments=14, ring_count=8, radius=1.0, location=(x, 0.0, -side * 1.3))
+        bpy.ops.mesh.primitive_uv_sphere_add(segments=14, ring_count=8, radius=1.0, location=(x, 0.0, -side * 1.0))
         crista = bpy.context.object
         crista.name = f"Crista_{i}"
-        crista.scale = (CRISTA_HALF_THICKNESS, 3.5, 2.9)
+        crista.scale = (CRISTA_HALF_THICKNESS, 3.0, 2.5)
         bpy.ops.object.transform_apply(scale=True, location=False)
         boolean_cut(crista, matrix, "INTERSECT")
         smooth(crista)
