@@ -42,26 +42,60 @@ export interface Placed {
   s: number;
 }
 
-function scatter(seed: number, count: number, minGap: number, scale: (r: () => number) => number): Placed[] {
+/**
+ * Random placement without overlaps: every body is a set of spheres (a mitochondrion is five along its
+ * axis), checked against everything placed before it through a coarse grid.
+ */
+const GRID = 0.6;
+const grid = new Map<string, { c: THREE.Vector3; r: number }[]>();
+const key = (x: number, y: number, z: number) => `${x},${y},${z}`;
+function fits(spheres: { c: THREE.Vector3; r: number }[]): boolean {
+  for (const s of spheres) {
+    const gx = Math.floor(s.c.x / GRID), gy = Math.floor(s.c.y / GRID), gz = Math.floor(s.c.z / GRID);
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
+      for (const o of grid.get(key(gx + dx, gy + dy, gz + dz)) ?? []) if (o.c.distanceTo(s.c) < o.r + s.r) return false;
+    }
+  }
+  return true;
+}
+function occupy(spheres: { c: THREE.Vector3; r: number }[]) {
+  for (const s of spheres) {
+    const k = key(Math.floor(s.c.x / GRID), Math.floor(s.c.y / GRID), Math.floor(s.c.z / GRID));
+    const list = grid.get(k) ?? [];
+    list.push(s);
+    grid.set(k, list);
+  }
+}
+
+function scatter(seed: number, count: number, reach: number, body: (p: THREE.Vector3, q: THREE.Quaternion) => { c: THREE.Vector3; r: number }[]): Placed[] {
   const r = rng(seed);
   const out: Placed[] = [];
-  while (out.length < count) {
-    const p = randomInBall(r, CYTOPLASM_RADIUS);
-    if (p.distanceTo(NUCLEUS) < NUCLEUS_CLEAR + minGap) continue;
-    if (p.distanceTo(GOLGI) < 1.2 + minGap) continue;
-    out.push({ p, q: randomQuat(r), s: scale(r) });
+  for (let tries = 0; out.length < count && tries < count * 200; tries++) {
+    const p = randomInBall(r, CYTOPLASM_RADIUS - reach);
+    if (p.distanceTo(NUCLEUS) < NUCLEUS_CLEAR + reach) continue;
+    if (p.distanceTo(GOLGI) < 1.2 + reach) continue;
+    const q = randomQuat(r);
+    const spheres = body(p, q);
+    if (!fits(spheres)) continue;
+    occupy(spheres);
+    out.push({ p, q, s: 1 });
   }
   return out;
 }
 
-export const CELL_LAYOUT = {
-  mitos: scatter(7, CELL_PARAMS.mitochondria, 0.1, () => 1),
-  granules: scatter(11, CELL_PARAMS.granules, 0.1, () => 1),
-};
-
 // Rotation that maps the model's long axis (X) onto the capsule's long axis (Y).
 const MITO_TO_CAPSULE = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
 const Y = new THREE.Vector3(0, 1, 0);
+
+export const CELL_LAYOUT = (() => {
+  const half = MITO_CAPSULE.length / 2;
+  const mitos = scatter(7, CELL_PARAMS.mitochondria, half + MITO_CAPSULE.radius, (p, q) =>
+    [-1, -0.5, 0, 0.5, 1].map((t) => ({ c: new THREE.Vector3(0, t * half, 0).applyQuaternion(q).add(p), r: MITO_CAPSULE.radius })),
+  );
+  const g = CELL_PARAMS.granuleDiameter / 2;
+  const granules = scatter(11, CELL_PARAMS.granules, g, (p) => [{ c: p, r: g }]);
+  return { mitos, granules };
+})();
 
 /** Child view centres of a level's anchors, in that level's coordinates (for picking and focusing). */
 const centerCache = new Map<LevelId, THREE.Vector3[]>();

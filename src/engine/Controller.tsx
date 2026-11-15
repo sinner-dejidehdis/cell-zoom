@@ -6,7 +6,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { LEVELS, childOf, pathTo, type LevelId } from '../content/levels';
-import { anchorCenters, homeCamera, makeAnchor, type Anchor } from './anchors';
+import { CELL_LAYOUT, anchorCenters, homeCamera, makeAnchor, type Anchor } from './anchors';
 import { pocket } from './pocket';
 import { domRefs, getSim } from './store';
 import { getWorld, setWorld } from './world';
@@ -162,6 +162,7 @@ export function Controller() {
         return { x: ((v.x + 1) / 2) * size.width, y: ((1 - v.y) / 2) * size.height, z: v.z };
       },
       anchors: () => anchorCenters(getWorld().level).length,
+      placed: () => [CELL_LAYOUT.mitos.length, CELL_LAYOUT.granules.length],
     };
   }, [cam, size]);
 
