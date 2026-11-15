@@ -106,8 +106,9 @@ function pickAnchor(scene: THREE.Scene, camera: THREE.Camera, ndc: THREE.Vector2
   return best;
 }
 
-function zoomAbout(camera: THREE.Camera, p: THREE.Vector3, logFactor: number) {
+function zoomAbout(camera: THREE.Camera, pivot: THREE.Vector3, logFactor: number) {
   const f = Math.exp(logFactor);
+  const p = pivot.clone(); // the pivot is often view.target itself, which is changed below
   camera.position.sub(p).multiplyScalar(f).add(p);
   view.target.sub(p).multiplyScalar(f).add(p);
 }
@@ -169,7 +170,7 @@ export function Controller() {
   // Pointer input.
   useEffect(() => {
     const el = gl.domElement;
-    let drag: { x: number; y: number; moved: number; id: number } | null = null;
+    let drag: { x: number; y: number; moved: number; id: number; pan: boolean } | null = null;
     const ndcOf = (e: { clientX: number; clientY: number }) => {
       const r = el.getBoundingClientRect();
       return new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
@@ -187,11 +188,34 @@ export function Controller() {
       cam.lookAt(view.target);
     };
     let hoverPending: THREE.Vector2 | null = null;
+    /** Slide the camera and its target sideways, by screen pixels. */
+    const pan = (dx: number, dy: number) => {
+      const d = cam.position.distanceTo(view.target);
+      const perPixel = (2 * d * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2))) / el.clientHeight;
+      const right = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0);
+      const up = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 1);
+      const move = right.multiplyScalar(-dx * perPixel).addScaledVector(up, dy * perPixel);
+      cam.position.add(move);
+      view.target.add(move);
+      view.autopilot = null;
+    };
     const onDown = (e: PointerEvent) => {
-      if (e.button !== 0) return;
-      drag = { x: e.clientX, y: e.clientY, moved: 0, id: e.pointerId };
+      // Left drag orbits; right or middle drag, or Shift + left drag, pans.
+      if (e.button !== 0 && e.button !== 1 && e.button !== 2) return;
+      drag = { x: e.clientX, y: e.clientY, moved: 0, id: e.pointerId, pan: e.button !== 0 || e.shiftKey };
       el.setPointerCapture(e.pointerId);
     };
+    const onContextMenu = (e: Event) => e.preventDefault();
+    const keys = new Set<string>();
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return;
+      const k = e.key.toLowerCase();
+      if (!['arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'w', 'a', 's', 'd'].includes(k)) return;
+      e.preventDefault();
+      if (e.type === 'keydown') keys.add(k);
+      else keys.delete(k);
+    };
+    const onBlur = () => keys.clear();
     const onMove = (e: PointerEvent) => {
       if (drag && e.pointerId === drag.id) {
         const dx = e.clientX - drag.x;
@@ -200,8 +224,11 @@ export function Controller() {
         drag.y = e.clientY;
         drag.moved += Math.abs(dx) + Math.abs(dy);
         if (drag.moved > 4) {
-          if (view.autopilot?.kind !== 'in') view.autopilot = null;
-          orbit(dx, dy);
+          if (drag.pan) pan(dx, dy);
+          else {
+            if (view.autopilot?.kind !== 'in') view.autopilot = null;
+            orbit(dx, dy);
+          }
         }
         return;
       }
@@ -209,7 +236,7 @@ export function Controller() {
     };
     const onUp = (e: PointerEvent) => {
       if (!drag || e.pointerId !== drag.id) return;
-      const click = drag.moved <= 4;
+      const click = drag.moved <= 4 && !drag.pan;
       drag = null;
       el.releasePointerCapture(e.pointerId);
       if (!click) return;
@@ -218,6 +245,11 @@ export function Controller() {
     };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      // A sideways two-finger swipe on a trackpad pans; up/down and pinch zoom.
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && !e.ctrlKey) {
+        pan(-e.deltaX, 0);
+        return;
+      }
       let dy = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 400 : 1);
       if (e.ctrlKey) dy *= 4; // trackpad pinch arrives as ctrl + small deltas
       dy = THREE.MathUtils.clamp(dy, -250, 250);
@@ -236,7 +268,18 @@ export function Controller() {
       view.pendingZoom += dy * 0.0016;
       view.autopilot = null;
     };
+    let last = performance.now();
     const tick = () => {
+      const now = performance.now();
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      if (keys.size) {
+        // Keys pan by about 60 % of the view per second.
+        const speed = el.clientHeight * 0.6 * dt;
+        const kx = (keys.has('arrowright') || keys.has('d') ? 1 : 0) - (keys.has('arrowleft') || keys.has('a') ? 1 : 0);
+        const ky = (keys.has('arrowup') || keys.has('w') ? 1 : 0) - (keys.has('arrowdown') || keys.has('s') ? 1 : 0);
+        if (kx || ky) pan(-kx * speed, ky * speed);
+      }
       if (hoverPending && !drag) {
         const i = pickAnchor(scene, cam, hoverPending, size);
         if (i !== getWorld().hover) setWorld({ hover: i });
@@ -247,12 +290,20 @@ export function Controller() {
     };
     let raf = requestAnimationFrame(tick);
     el.addEventListener('pointerdown', onDown);
+    el.addEventListener('contextmenu', onContextMenu);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('keyup', onKey);
+    window.addEventListener('blur', onBlur);
     el.addEventListener('pointermove', onMove);
     el.addEventListener('pointerup', onUp);
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => {
       cancelAnimationFrame(raf);
       el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('contextmenu', onContextMenu);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onKey);
+      window.removeEventListener('blur', onBlur);
       el.removeEventListener('pointermove', onMove);
       el.removeEventListener('pointerup', onUp);
       el.removeEventListener('wheel', onWheel);

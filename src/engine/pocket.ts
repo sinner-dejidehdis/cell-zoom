@@ -56,3 +56,22 @@ export function inPocket(worldPoint: THREE.Vector3): boolean {
 
 /** Per-frame switches for context drawn around the current level. */
 export const contextDetail = { showNeighbours: true };
+
+/**
+ * Patch an ordinary (non-instanced) material so that the part of the surface inside the given sphere is
+ * not drawn: a cut-away. Used for the nucleus and Golgi, which the camera may fly through.
+ */
+export function withCutaway(material: THREE.Material, clip: typeof nearClip = nearClip): THREE.Material {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uClipCenter = clip.uClipCenter;
+    shader.uniforms.uClipRadius = clip.uClipRadius;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vCutWorld;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvCutWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vCutWorld;\nuniform vec3 uClipCenter;\nuniform float uClipRadius;')
+      .replace('void main() {', 'void main() {\n  if (distance(vCutWorld, uClipCenter) < uClipRadius) discard;');
+  };
+  material.needsUpdate = true;
+  return material;
+}

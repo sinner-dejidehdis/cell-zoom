@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { CELL_PARAMS } from '../content/levels';
 import { CELL_LAYOUT, MITO_CAPSULE } from '../engine/anchors';
 import { getData } from '../engine/data';
-import { nearClip, withPocket } from '../engine/pocket';
+import { nearClip, withCutaway, withPocket } from '../engine/pocket';
 import { useSim } from '../engine/store';
 import type { SceneProps } from './types';
 import { fixTransparency } from './util';
@@ -29,6 +29,17 @@ export function CellScene({ role, hidden, hover }: SceneProps) {
   const model = useMemo(() => {
     const s = getData().cell.clone(true);
     fixTransparency(s);
+    // Organelles are cut away near the camera, like the granules, so a flight through them stays readable.
+    s.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.material = withCutaway((mesh.material as THREE.Material).clone());
+      mesh.raycast = function (raycaster, hits) {
+        const mine: THREE.Intersection[] = [];
+        THREE.Mesh.prototype.raycast.call(this, raycaster, mine);
+        for (const h of mine) if (h.point.distanceTo(nearClip.uClipCenter.value) >= nearClip.uClipRadius.value) hits.push(h);
+      };
+    });
     return s;
   }, []);
 
