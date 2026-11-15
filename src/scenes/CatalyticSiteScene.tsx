@@ -1,24 +1,8 @@
 import { Html } from '@react-three/drei';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
+import { getData, type SiteAtom } from '../engine/data';
 import type { SceneProps } from './types';
-import { asset } from './util';
-
-interface SiteAtom {
-  el: string;
-  name: string;
-  resn: string;
-  resi: string;
-  chain: string;
-  ligand: boolean;
-  xyz: [number, number, number];
-}
-
-interface Site {
-  pdbId: string;
-  atoms: SiteAtom[];
-  bonds: [number, number][];
-}
 
 // CPK-style element colours; ligand carbons are yellow so ADP stands out from the protein.
 const ELEMENT_COLOR: Record<string, string> = {
@@ -38,17 +22,15 @@ function atomColor(a: SiteAtom): string {
   return ELEMENT_COLOR[a.el] ?? '#cccccc';
 }
 
-export function CatalyticSiteScene(_: SceneProps) {
-  const [site, setSite] = useState<Site | null>(null);
-  useEffect(() => {
-    fetch(asset('data/atp-synthase-site.json')).then((r) => r.json()).then(setSite);
-  }, []);
+export function CatalyticSiteScene({ role }: SceneProps) {
+  const site = getData().site;
+  const align = getData().atp.align;
 
   const atomsRef = useRef<THREE.InstancedMesh>(null);
   const bondsRef = useRef<THREE.InstancedMesh>(null);
 
   useLayoutEffect(() => {
-    if (!site || !atomsRef.current || !bondsRef.current) return;
+    if (!atomsRef.current || !bondsRef.current) return;
     const m = new THREE.Matrix4();
     const c = new THREE.Color();
     site.atoms.forEach((a, i) => {
@@ -78,7 +60,6 @@ export function CatalyticSiteScene(_: SceneProps) {
   }, [site]);
 
   const labels = useMemo(() => {
-    if (!site) return [];
     const out: { pos: THREE.Vector3; text: string; strong?: boolean }[] = [];
     for (const l of LABELS) {
       const a = site.atoms.find((x) => x.chain === l.chain && x.resi === l.resi && x.name === l.atom);
@@ -91,10 +72,9 @@ export function CatalyticSiteScene(_: SceneProps) {
     return out;
   }, [site]);
 
-  if (!site) return null;
-
+  // Same orientation as the ATP synthase it sits in (atoms are stored relative to the ADP centre).
   return (
-    <group>
+    <group quaternion={align}>
       <instancedMesh ref={atomsRef} args={[undefined, undefined, site.atoms.length]} raycast={() => null}>
         <sphereGeometry args={[1, 20, 14]} />
         <meshStandardMaterial roughness={0.35} />
@@ -103,7 +83,7 @@ export function CatalyticSiteScene(_: SceneProps) {
         <cylinderGeometry args={[1, 1, 1, 10]} />
         <meshStandardMaterial roughness={0.4} />
       </instancedMesh>
-      {labels.map((l) => (
+      {role === 'current' && labels.map((l) => (
         <Html key={l.text} position={l.pos} center style={{ pointerEvents: 'none' }}>
           <span className={l.strong ? 'atom-label strong' : 'atom-label'}>{l.text}</span>
         </Html>

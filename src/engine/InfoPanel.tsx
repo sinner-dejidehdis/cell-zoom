@@ -1,10 +1,11 @@
-import { useState } from 'react';
 import { LEVELS, type LevelId } from '../content/levels';
 import { levelText, ui } from '../i18n';
+import { setSim, useSim } from './store';
 
 export function InfoPanel({ level }: { level: LevelId }) {
   const t = levelText(LEVELS[level].textKey);
-  const [open, setOpen] = useState(true);
+  const open = useSim().panelOpen;
+  const setOpen = (v: boolean) => setSim({ panelOpen: v });
   return (
     <aside className={open ? 'panel' : 'panel closed'}>
       <button className="panel-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>

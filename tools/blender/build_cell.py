@@ -18,7 +18,7 @@ from common import apply_modifiers, assign, export_glb, material, reset_scene, s
 
 OUT = Path(__file__).resolve().parents[2] / "public" / "models" / "cell.glb"
 
-CELL_RADIUS = 6.0  # um; illustrative, real human beta-cell size still to be verified
+CELL_RADIUS = 6.5  # um; sphere of the same volume as the mean human beta cell, 1,158 um3 (stereology of human pancreas, PubMed 22797400)
 NUCLEUS_RADIUS = 2.4
 NUCLEUS_CENTER = (-1.3, 0.4, 0.2)
 

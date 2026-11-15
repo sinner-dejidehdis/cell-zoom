@@ -47,14 +47,9 @@ export function fixTransparency(root: THREE.Object3D): void {
       if (m.transparent) {
         m.depthWrite = false;
         m.side = THREE.DoubleSide;
+        // Zooming aims through see-through shells at what lies behind them.
+        mesh.userData.noPivot = true;
       }
     }
   });
-}
-
-/** World position of one instance of an InstancedMesh. */
-export function instanceWorldPosition(mesh: THREE.InstancedMesh, id: number): THREE.Vector3 {
-  const m = new THREE.Matrix4();
-  mesh.getMatrixAt(id, m);
-  return new THREE.Vector3().setFromMatrixPosition(m).applyMatrix4(mesh.matrixWorld);
 }
