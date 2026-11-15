@@ -1,8 +1,10 @@
+import { useFrame } from '@react-three/fiber';
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { makeAnchor } from '../engine/anchors';
 import { getData } from '../engine/data';
+import { contextDetail } from '../engine/pocket';
 import type { SceneProps } from './types';
 import { fixTransparency } from './util';
 
@@ -34,6 +36,9 @@ export function MitochondrionScene({ role, hidden, hover }: SceneProps) {
 
   const ref = useRef<THREE.InstancedMesh>(null);
   const markerRef = useRef<THREE.Points>(null);
+  useFrame(() => {
+    if (ref.current) ref.current.visible = role !== 'parent' || contextDetail.showNeighbours;
+  });
 
   // The proxies are only a few pixels across at this level's resting view, so each also gets a
   // fixed-size dot. The dot marks where an enzyme is; it says nothing about its size.

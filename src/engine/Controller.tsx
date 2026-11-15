@@ -7,7 +7,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { LEVELS, childOf, pathTo, type LevelId } from '../content/levels';
 import { CELL_LAYOUT, anchorCenters, homeCamera, makeAnchor, type Anchor } from './anchors';
-import { nearClip, pocket } from './pocket';
+import { contextDetail, nearClip, pocket } from './pocket';
 import { domRefs, getSim } from './store';
 import { getWorld, setWorld } from './world';
 
@@ -360,19 +360,25 @@ export function Controller() {
       }
     }
 
-    // 6. Cut a hole into the atom cloud around the catalytic site, so its ball-and-stick view shows.
+    // 6. Bore a tunnel from the camera to the catalytic site through the space-filling atoms, so the
+    //    ball-and-stick site at its end shows while the rest of the protein stays around it.
+    pocket.uClipEnd.value.copy(cam.position);
+    const tunnel = THREE.MathUtils.clamp(0.4 * d, 15, 30);
     if (w.level === 'atp-synthase' && w.focus && w.revealed && C) {
-      // Opens over the first quarter of the approach; the camera ends up inside the hole, so nothing blocks the view.
       const t = THREE.MathUtils.smoothstep(C.zoom.revealAt! - d, 0, C.zoom.revealAt! * 0.25);
       pocket.uClipCenter.value.copy(w.focus.center);
-      pocket.uClipRadius.value = t * 1.1 * d;
+      pocket.uClipRadius.value = t * tunnel;
     } else if (w.level === 'catalytic-site') {
       pocket.uClipCenter.value.set(0, 0, 0);
-      pocket.uClipRadius.value = THREE.MathUtils.clamp(1.1 * d, 14, 80);
+      pocket.uClipRadius.value = tunnel;
     } else pocket.uClipRadius.value = 0;
+
+    // Neighbouring ATP synthases (drawn by the mitochondrion around this one) only add clutter up close.
+    contextDetail.showNeighbours = !(w.level === 'atp-synthase' && d < 250);
 
     // Clear the packed cytoplasm between the camera and what it is looking at, once the camera is inside the cell.
     nearClip.uClipCenter.value.copy(cam.position);
+    nearClip.uClipEnd.value.copy(cam.position);
     if (w.level === 'cell') nearClip.uClipRadius.value = 0.8 * d * (1 - THREE.MathUtils.smoothstep(d, 6, 8));
     else if (w.level === 'mitochondrion') nearClip.uClipRadius.value = 0.8 * d;
     else nearClip.uClipRadius.value = 0;
