@@ -7,7 +7,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { LEVELS, childOf, pathTo, type LevelId } from '../content/levels';
 import { CELL_LAYOUT, anchorCenters, homeCamera, makeAnchor, type Anchor } from './anchors';
-import { pocket } from './pocket';
+import { nearClip, pocket } from './pocket';
 import { domRefs, getSim } from './store';
 import { getWorld, setWorld } from './world';
 
@@ -370,6 +370,12 @@ export function Controller() {
       pocket.uClipCenter.value.set(0, 0, 0);
       pocket.uClipRadius.value = THREE.MathUtils.clamp(1.1 * d, 14, 80);
     } else pocket.uClipRadius.value = 0;
+
+    // Clear the packed cytoplasm between the camera and what it is looking at, once the camera is inside the cell.
+    nearClip.uClipCenter.value.copy(cam.position);
+    if (w.level === 'cell') nearClip.uClipRadius.value = 0.8 * d * (1 - THREE.MathUtils.smoothstep(d, 6, 8));
+    else if (w.level === 'mitochondrion') nearClip.uClipRadius.value = 0.8 * d;
+    else nearClip.uClipRadius.value = 0;
 
     // 7. Depth range follows the zoom (with a logarithmic depth buffer, so the ratio can be large).
     cam.near = d * 0.002;

@@ -7,11 +7,20 @@ export const pocket = {
   uClipRadius: { value: 0 },
 };
 
-/** Patch a material used on an InstancedMesh so that instances inside the pocket collapse to nothing. */
-export function withPocket(material: THREE.Material): THREE.Material {
+/**
+ * A sphere around the camera inside which the cell's granules and mitochondria are not drawn. The real
+ * cytoplasm is packed (10,000 granules), so without it the camera would see only the nearest granule.
+ */
+export const nearClip = {
+  uClipCenter: { value: new THREE.Vector3() },
+  uClipRadius: { value: 0 },
+};
+
+/** Patch a material used on an InstancedMesh so that instances inside the given sphere collapse to nothing. */
+export function withPocket(material: THREE.Material, clip: typeof pocket = pocket): THREE.Material {
   material.onBeforeCompile = (shader) => {
-    shader.uniforms.uClipCenter = pocket.uClipCenter;
-    shader.uniforms.uClipRadius = pocket.uClipRadius;
+    shader.uniforms.uClipCenter = clip.uClipCenter;
+    shader.uniforms.uClipRadius = clip.uClipRadius;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nuniform vec3 uClipCenter;\nuniform float uClipRadius;')
       .replace(

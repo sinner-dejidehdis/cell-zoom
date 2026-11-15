@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { CELL_PARAMS } from '../content/levels';
 import { CELL_LAYOUT, MITO_CAPSULE } from '../engine/anchors';
 import { getData } from '../engine/data';
+import { nearClip, withPocket } from '../engine/pocket';
 import { useSim } from '../engine/store';
 import type { SceneProps } from './types';
 import { fixTransparency } from './util';
@@ -10,6 +11,19 @@ import { fixTransparency } from './util';
 const MITO_COLOR = new THREE.Color('#f08a4b');
 const MITO_HOVER = new THREE.Color('#ffe08a');
 const ZERO = new THREE.Vector3(0, 0, 0);
+
+/** Ray casting that ignores instances hidden by the clip sphere around the camera. */
+function clippedRaycast(this: THREE.InstancedMesh, raycaster: THREE.Raycaster, hits: THREE.Intersection[]) {
+  const mine: THREE.Intersection[] = [];
+  THREE.InstancedMesh.prototype.raycast.call(this, raycaster, mine);
+  const m = new THREE.Matrix4();
+  const c = new THREE.Vector3();
+  for (const h of mine) {
+    this.getMatrixAt(h.instanceId!, m);
+    c.setFromMatrixPosition(m).applyMatrix4(this.matrixWorld);
+    if (c.distanceTo(nearClip.uClipCenter.value) >= nearClip.uClipRadius.value) hits.push(h);
+  }
+}
 
 export function CellScene({ role, hidden, hover }: SceneProps) {
   const model = useMemo(() => {
@@ -19,6 +33,8 @@ export function CellScene({ role, hidden, hover }: SceneProps) {
   }, []);
 
   const sparse = useSim().sparseGranules;
+  const mitoMaterial = useMemo(() => withPocket(new THREE.MeshStandardMaterial({ roughness: 0.5 }), nearClip), []);
+  const granuleMaterial = useMemo(() => withPocket(new THREE.MeshStandardMaterial({ color: '#f4ecd8', roughness: 0.4 }), nearClip), []);
   const mitoRef = useRef<THREE.InstancedMesh>(null);
   const granuleRef = useRef<THREE.InstancedMesh>(null);
 
@@ -48,13 +64,11 @@ export function CellScene({ role, hidden, hover }: SceneProps) {
   return (
     <group>
       <primitive object={model} />
-      <instancedMesh ref={mitoRef} args={[undefined, undefined, CELL_LAYOUT.mitos.length]} userData={{ anchorLevel: 'cell' }}>
+      <instancedMesh ref={mitoRef} args={[undefined, mitoMaterial, CELL_LAYOUT.mitos.length]} userData={{ anchorLevel: 'cell' }} raycast={clippedRaycast}>
         <capsuleGeometry args={[MITO_CAPSULE.radius, MITO_CAPSULE.length, 6, 16]} />
-        <meshStandardMaterial roughness={0.5} />
       </instancedMesh>
-      <instancedMesh ref={granuleRef} args={[undefined, undefined, CELL_LAYOUT.granules.length]} count={sparse ? CELL_LAYOUT.granules.length / 10 : CELL_LAYOUT.granules.length}>
+      <instancedMesh ref={granuleRef} args={[undefined, granuleMaterial, CELL_LAYOUT.granules.length]} count={sparse ? CELL_LAYOUT.granules.length / 10 : CELL_LAYOUT.granules.length} raycast={clippedRaycast}>
         <icosahedronGeometry args={[CELL_PARAMS.granuleDiameter / 2, 2]} />
-        <meshStandardMaterial color="#f4ecd8" roughness={0.4} />
       </instancedMesh>
     </group>
   );
