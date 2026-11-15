@@ -8,6 +8,7 @@
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
   color: var(--text);
   background: var(--bg);
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }

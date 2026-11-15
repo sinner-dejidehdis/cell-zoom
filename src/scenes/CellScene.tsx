@@ -4,7 +4,7 @@ import { useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { CELL_PARAMS } from '../content/levels';
 import type { SceneProps } from './types';
-import { BASE, fixTransparency, instanceWorldPosition, randomInBall, randomQuat, rng } from './util';
+import { asset, fixTransparency, instanceWorldPosition, randomInBall, randomQuat, rng } from './util';
 
 // Positions of the Blender-built parts, in this scene's frame (1 unit = 1 um, Y up).
 const NUCLEUS = new THREE.Vector3(-1.3, 0.2, -0.4);
@@ -28,7 +28,7 @@ function scatter(seed: number, count: number, minGap: number) {
 }
 
 export function CellScene({ onZoom }: SceneProps) {
-  const gltf = useGLTF(`${BASE}models/cell.glb`);
+  const gltf = useGLTF(asset('models/cell.glb'));
   const model = useMemo(() => {
     const s = gltf.scene.clone(true);
     fixTransparency(s);
@@ -93,4 +93,4 @@ export function CellScene({ onZoom }: SceneProps) {
   );
 }
 
-useGLTF.preload(`${BASE}models/cell.glb`);
+useGLTF.preload(asset('models/cell.glb'));

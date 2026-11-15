@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { getSim, useSim } from '../engine/store';
 import type { SceneProps } from './types';
-import { BASE } from './util';
+import { asset } from './util';
 
 interface Meta {
   pdbId: string;
@@ -42,8 +42,8 @@ const STEP_MOVE = 0.35;   // fraction of a step spent turning; the rest is the d
 
 async function load(): Promise<Structure> {
   const [meta, bin] = await Promise.all([
-    fetch(`${BASE}data/atp-synthase.json`).then((r) => r.json() as Promise<Meta>),
-    fetch(`${BASE}data/atp-synthase.bin`).then((r) => r.arrayBuffer()),
+    fetch(asset('data/atp-synthase.json')).then((r) => r.json() as Promise<Meta>),
+    fetch(asset('data/atp-synthase.bin')).then((r) => r.arrayBuffer()),
   ]);
   const n = meta.atomCount;
   return {

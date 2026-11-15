@@ -3,7 +3,7 @@ import type { ThreeEvent } from '@react-three/fiber';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { SceneProps } from './types';
-import { BASE, fixTransparency, instanceWorldPosition } from './util';
+import { asset, fixTransparency, instanceWorldPosition } from './util';
 
 interface Site {
   crista: number;
@@ -15,7 +15,7 @@ const SITE_COLOR = new THREE.Color('#f4f7ff');
 const SITE_HOVER = new THREE.Color('#7dffb0');
 
 export function MitochondrionScene({ onZoom }: SceneProps) {
-  const gltf = useGLTF(`${BASE}models/mitochondrion.glb`);
+  const gltf = useGLTF(asset('models/mitochondrion.glb'));
   const model = useMemo(() => {
     const s = gltf.scene.clone(true);
     fixTransparency(s);
@@ -24,7 +24,7 @@ export function MitochondrionScene({ onZoom }: SceneProps) {
 
   const [sites, setSites] = useState<Site[]>([]);
   useEffect(() => {
-    fetch(`${BASE}models/mitochondrion-sites.json`)
+    fetch(asset('models/mitochondrion-sites.json'))
       .then((r) => r.json())
       .then((d: { sites: Site[] }) => setSites(d.sites));
   }, []);
@@ -86,4 +86,4 @@ export function MitochondrionScene({ onZoom }: SceneProps) {
   );
 }
 
-useGLTF.preload(`${BASE}models/mitochondrion.glb`);
+useGLTF.preload(asset('models/mitochondrion.glb'));

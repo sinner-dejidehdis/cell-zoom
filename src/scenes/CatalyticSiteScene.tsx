@@ -2,7 +2,7 @@ import { Html } from '@react-three/drei';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { SceneProps } from './types';
-import { BASE } from './util';
+import { asset } from './util';
 
 interface SiteAtom {
   el: string;
@@ -41,7 +41,7 @@ function atomColor(a: SiteAtom): string {
 export function CatalyticSiteScene(_: SceneProps) {
   const [site, setSite] = useState<Site | null>(null);
   useEffect(() => {
-    fetch(`${BASE}data/atp-synthase-site.json`).then((r) => r.json()).then(setSite);
+    fetch(asset('data/atp-synthase-site.json')).then((r) => r.json()).then(setSite);
   }, []);
 
   const atomsRef = useRef<THREE.InstancedMesh>(null);
