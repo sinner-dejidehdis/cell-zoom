@@ -84,8 +84,17 @@ export const CELL_PARAMS = {
   cellVolume: 1158,
   /** Insulin granules per human beta cell (BioNumbers 109971). All are drawn; the interface can thin them out. */
   granules: 10000,
-  /** Granule diameter, um: about 300 nm in reviews of human and rodent EM; species and fixation change it by ~20 %. */
-  granuleDiameter: 0.3,
+  /**
+   * Granule diameter, um, drawn from a normal distribution clamped to [min, max].
+   * Human beta cells, chemically fixed: 0.45 +/- 0.15 um (Kalina et al. 1989, Virchows Arch A, doi 10.1007/BF01606466).
+   * In rat beta cells, chemical fixation makes granules ~30 % larger than high-pressure freezing
+   * (~350 vs 243 nm; Fava et al. 2012, Diabetologia, PMC3296007). Applying that rat correction to the human
+   * numbers (our inference, not a human measurement) gives about 0.31 +/- 0.10 um.
+   */
+  granuleDiameter: { mean: 0.31, sd: 0.1, min: 0.15, max: 0.6 },
+  /** Dense-core diameter as a share of the granule. After high-pressure freezing most granules have no halo
+   * (Fava 2012, rat), so the core nearly fills the granule; the exact share is illustrative. */
+  granuleCore: 0.85,
   /**
    * Mitochondrial volume density in beta cells of non-diabetic human donors: 3.1 % of cell volume
    * (Diabetologia 2005, doi 10.1007/s00125-004-1627-9). The size of one mitochondrion here (1.0 x 0.4 um,

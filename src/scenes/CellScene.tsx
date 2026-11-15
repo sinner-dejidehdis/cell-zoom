@@ -25,6 +25,8 @@ function clippedRaycast(this: THREE.InstancedMesh, raycaster: THREE.Raycaster, h
   }
 }
 
+function noRaycast() {}
+
 export function CellScene({ role, hidden, hover }: SceneProps) {
   const model = useMemo(() => {
     const s = getData().cell.clone(true);
@@ -44,10 +46,17 @@ export function CellScene({ role, hidden, hover }: SceneProps) {
   }, []);
 
   const sparse = useSim().sparseGranules;
+  const granuleCount = sparse ? Math.floor(CELL_LAYOUT.granules.length / 10) : CELL_LAYOUT.granules.length;
   const mitoMaterial = useMemo(() => withPocket(new THREE.MeshStandardMaterial({ roughness: 0.5 }), nearClip), []);
-  const granuleMaterial = useMemo(() => withPocket(new THREE.MeshStandardMaterial({ color: '#f4ecd8', roughness: 0.4 }), nearClip), []);
+  // A granule is a crystalline insulin core (faceted) inside its limiting membrane (translucent shell).
+  const coreMaterial = useMemo(() => withPocket(new THREE.MeshStandardMaterial({ color: '#e9cf92', roughness: 0.45 }), nearClip), []);
+  const shellMaterial = useMemo(
+    () => withPocket(new THREE.MeshStandardMaterial({ color: '#f7f1e3', roughness: 0.3, transparent: true, opacity: 0.4, depthWrite: false }), nearClip),
+    [],
+  );
   const mitoRef = useRef<THREE.InstancedMesh>(null);
   const granuleRef = useRef<THREE.InstancedMesh>(null);
+  const shellRef = useRef<THREE.InstancedMesh>(null);
 
   useLayoutEffect(() => {
     const m = new THREE.Matrix4();
@@ -67,9 +76,16 @@ export function CellScene({ role, hidden, hover }: SceneProps) {
 
   useLayoutEffect(() => {
     const m = new THREE.Matrix4();
-    const one = new THREE.Vector3(1, 1, 1);
-    CELL_LAYOUT.granules.forEach(({ p, q }, i) => granuleRef.current!.setMatrixAt(i, m.compose(p, q, one)));
+    const v = new THREE.Vector3();
+    CELL_LAYOUT.granules.forEach(({ p, q, s }, i) => {
+      m.compose(p, q, v.setScalar(s));
+      granuleRef.current!.setMatrixAt(i, m);
+      shellRef.current!.setMatrixAt(i, m);
+    });
     granuleRef.current!.instanceMatrix.needsUpdate = true;
+    shellRef.current!.instanceMatrix.needsUpdate = true;
+    granuleRef.current!.computeBoundingSphere();
+    shellRef.current!.computeBoundingSphere();
   }, []);
 
   return (
@@ -78,8 +94,11 @@ export function CellScene({ role, hidden, hover }: SceneProps) {
       <instancedMesh ref={mitoRef} args={[undefined, mitoMaterial, CELL_LAYOUT.mitos.length]} userData={{ anchorLevel: 'cell' }} raycast={clippedRaycast}>
         <capsuleGeometry args={[MITO_CAPSULE.radius, MITO_CAPSULE.length, 6, 16]} />
       </instancedMesh>
-      <instancedMesh ref={granuleRef} args={[undefined, granuleMaterial, CELL_LAYOUT.granules.length]} count={sparse ? CELL_LAYOUT.granules.length / 10 : CELL_LAYOUT.granules.length} raycast={clippedRaycast}>
-        <icosahedronGeometry args={[CELL_PARAMS.granuleDiameter / 2, 2]} />
+      <instancedMesh ref={granuleRef} args={[undefined, coreMaterial, CELL_LAYOUT.granules.length]} count={granuleCount} raycast={clippedRaycast}>
+        <icosahedronGeometry args={[CELL_PARAMS.granuleCore / 2, 2]} />
+      </instancedMesh>
+      <instancedMesh ref={shellRef} args={[undefined, shellMaterial, CELL_LAYOUT.granules.length]} count={granuleCount} raycast={noRaycast}>
+        <icosahedronGeometry args={[0.5, 2]} />
       </instancedMesh>
     </group>
   );

@@ -5,7 +5,8 @@
 // which is why the zoom can be continuous: nothing on screen moves at the moment of the switch.
 import * as THREE from 'three';
 import { CELL_PARAMS, LEVELS, childOf, type LevelId } from '../content/levels';
-import { randomInBall, randomQuat, rng } from '../scenes/util';
+import { randomQuat, rng } from '../scenes/util';
+import LAYOUT from '../content/cell-layout.json';
 import { getData } from './data';
 
 export interface Anchor {
@@ -20,11 +21,25 @@ export interface Anchor {
   scale: number;
 }
 
-// ---- Cell layout (1 unit = 1 µm) ----
-export const NUCLEUS = new THREE.Vector3(-1.3, 0.2, -0.4);
-const NUCLEUS_CLEAR = 3.0;
-const GOLGI = new THREE.Vector3(2.1, 0.9, -1.4);
-const CYTOPLASM_RADIUS = 5.9; // inside the 6.5 um membrane
+// ---- Cell layout (1 unit = 1 um) ----
+// The membrane, nucleus, ER, Golgi and cilium come from tools/blender/build_cell.py, which also writes
+// where they are (cell-layout.json). Mitochondria and granules are placed here, inside the membrane and
+// clear of those structures.
+export const NUCLEUS = new THREE.Vector3(...(LAYOUT.nucleus.center as [number, number, number]));
+const NUCLEUS_RADII = new THREE.Vector3(...(LAYOUT.nucleus.radii as [number, number, number]));
+const PLANES = LAYOUT.planes.map((p) => ({ n: new THREE.Vector3(...(p.n as [number, number, number])), d: p.d }));
+const EXCLUSIONS = LAYOUT.exclusions.map((e) => ({ c: new THREE.Vector3(...(e.c as [number, number, number])), r: e.r }));
+/** Space kept free under the membrane (its rounded edges and relief). */
+const MEMBRANE_MARGIN = 0.25;
+
+function insideCell(p: THREE.Vector3, reach: number): boolean {
+  return PLANES.every(({ n, d }) => n.dot(p) <= d - reach - MEMBRANE_MARGIN);
+}
+function clearOfNucleus(p: THREE.Vector3, reach: number): boolean {
+  const q = p.clone().sub(NUCLEUS);
+  const m = 0.08 + reach; // the envelope and its pores stand a little proud of the ellipsoid
+  return new THREE.Vector3(q.x / (NUCLEUS_RADII.x + m), q.y / (NUCLEUS_RADII.y + m), q.z / (NUCLEUS_RADII.z + m)).length() > 1;
+}
 
 /**
  * The mitochondrion model (tools/blender) is 20 x 8 model units. Every mitochondrion is drawn at the same
@@ -39,6 +54,7 @@ export const ATP_IN_MITO = 2e-3;
 export interface Placed {
   p: THREE.Vector3;
   q: THREE.Quaternion;
+  /** Diameter for granules (um); 1 for mitochondria. */
   s: number;
 }
 
@@ -67,20 +83,37 @@ function occupy(spheres: { c: THREE.Vector3; r: number }[]) {
   }
 }
 
-function scatter(seed: number, count: number, reach: number, body: (p: THREE.Vector3, q: THREE.Quaternion) => { c: THREE.Vector3; r: number }[]): Placed[] {
+const BOUND = Math.max(...PLANES.map((p) => p.d));
+
+function scatter(
+  seed: number,
+  count: number,
+  size: (r: () => number) => number,
+  reachOf: (s: number) => number,
+  body: (p: THREE.Vector3, q: THREE.Quaternion, s: number) => { c: THREE.Vector3; r: number }[],
+): Placed[] {
   const r = rng(seed);
   const out: Placed[] = [];
-  for (let tries = 0; out.length < count && tries < count * 200; tries++) {
-    const p = randomInBall(r, CYTOPLASM_RADIUS - reach);
-    if (p.distanceTo(NUCLEUS) < NUCLEUS_CLEAR + reach) continue;
-    if (p.distanceTo(GOLGI) < 1.2 + reach) continue;
+  const p = new THREE.Vector3();
+  for (let tries = 0; out.length < count && tries < count * 300; tries++) {
+    p.set((r() * 2 - 1) * BOUND, (r() * 2 - 1) * BOUND, (r() * 2 - 1) * BOUND);
+    const s = size(r);
+    const reach = reachOf(s);
+    if (!insideCell(p, reach) || !clearOfNucleus(p, reach)) continue;
+    if (EXCLUSIONS.some((e) => e.c.distanceTo(p) < e.r + reach)) continue;
     const q = randomQuat(r);
-    const spheres = body(p, q);
+    const spheres = body(p.clone(), q, s);
     if (!fits(spheres)) continue;
     occupy(spheres);
-    out.push({ p, q, s: 1 });
+    out.push({ p: p.clone(), q, s });
   }
+  if (out.length < count) console.warn(`placed ${out.length} of ${count}`);
   return out;
+}
+
+/** Normal deviate (Box-Muller). */
+function gauss(r: () => number): number {
+  return Math.sqrt(-2 * Math.log(1 - r())) * Math.cos(2 * Math.PI * r());
 }
 
 // Rotation that maps the model's long axis (X) onto the capsule's long axis (Y).
@@ -89,13 +122,23 @@ const Y = new THREE.Vector3(0, 1, 0);
 
 export const CELL_LAYOUT = (() => {
   const half = MITO_CAPSULE.length / 2;
-  const mitos = scatter(7, CELL_PARAMS.mitochondria, half + MITO_CAPSULE.radius, (p, q) =>
+  const mitos = scatter(7, CELL_PARAMS.mitochondria, () => 1, () => half + MITO_CAPSULE.radius, (p, q) =>
     [-1, -0.5, 0, 0.5, 1].map((t) => ({ c: new THREE.Vector3(0, t * half, 0).applyQuaternion(q).add(p), r: MITO_CAPSULE.radius })),
   );
-  const g = CELL_PARAMS.granuleDiameter / 2;
-  const granules = scatter(11, CELL_PARAMS.granules, g, (p) => [{ c: p, r: g }]);
+  const { mean, sd, min, max } = CELL_PARAMS.granuleDiameter;
+  const granules = scatter(
+    11,
+    CELL_PARAMS.granules,
+    (r) => THREE.MathUtils.clamp(mean + sd * gauss(r), min, max),
+    (s) => s / 2,
+    (p, _q, s) => [{ c: p, r: s / 2 }],
+  );
   return { mitos, granules };
 })();
+
+/** Total granule volume as a share of the cell, for the panel text. */
+export const GRANULE_VOLUME_SHARE =
+  CELL_LAYOUT.granules.reduce((sum, g) => sum + (Math.PI / 6) * g.s ** 3, 0) / CELL_PARAMS.cellVolume;
 
 /** Child view centres of a level's anchors, in that level's coordinates (for picking and focusing). */
 const centerCache = new Map<LevelId, THREE.Vector3[]>();
