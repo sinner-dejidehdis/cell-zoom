@@ -93,6 +93,11 @@ function occupy(spheres: { c: THREE.Vector3; r: number }[]) {
   }
 }
 
+/** Whether a body of the given reach centred at p is inside the cell and clear of the nucleus, ER, Golgi and cilium. */
+export function freeSpace(p: THREE.Vector3, reach: number): boolean {
+  return insideCell(p, reach) && clearOfNucleus(p, reach) && !EXCLUSIONS.some((e) => e.c.distanceTo(p) < e.r + reach);
+}
+
 const BOUND = Math.max(...PLANES.map((p) => p.d));
 
 function scatter(
@@ -215,7 +220,8 @@ export function anchorCenters(level: LevelId): THREE.Vector3[] {
   const hit = centerCache.get(level);
   if (hit) return hit;
   let out: THREE.Vector3[] = [];
-  if (level === 'cell') out = CELL_LAYOUT.mitos.map((m) => m.p.clone());
+  // Live references: the mitochondria move (CellScene), and picking follows them.
+  if (level === 'cell') out = CELL_LAYOUT.mitos.map((m) => m.p);
   else if (level === 'mitochondrion' || level === 'atp-synthase') {
     out = Array.from({ length: anchorCount(level) }, (_, i) => makeAnchor(level, i, new THREE.Vector3(0, 0, 1)).center);
   }

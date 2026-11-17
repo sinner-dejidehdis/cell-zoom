@@ -10,9 +10,11 @@ export interface SimState {
   sparseGranules: boolean;
   /** Cut the cell open with a plane, like a textbook drawing, to show the inside. */
   cutaway: boolean;
+  /** Organelles and particles move (real time). */
+  motion: boolean;
 }
 
-let state: SimState = { playing: true, showInhibitor: false, panelOpen: true, sparseGranules: false, cutaway: true };
+let state: SimState = { playing: true, showInhibitor: false, panelOpen: true, sparseGranules: false, cutaway: true, motion: true };
 const listeners = new Set<() => void>();
 
 export function getSim(): SimState {

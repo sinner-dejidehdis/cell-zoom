@@ -122,6 +122,10 @@ function Viewer() {
               <input type="checkbox" checked={sim.cutaway} onChange={(e) => setSim({ cutaway: e.target.checked })} />
               剖开细胞
             </label>
+            <label>
+              <input type="checkbox" checked={sim.motion} onChange={(e) => setSim({ motion: e.target.checked })} />
+              细胞器运动
+            </label>
           </span>
         )}
         {(level === 'atp-synthase' || level === 'catalytic-site') && (

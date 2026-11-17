@@ -187,8 +187,16 @@ def matrix_contents(inner_r):
     def free(p, r):
         if math.hypot(p.y, p.z) > inner_r - r - 0.1 or abs(p.x) > HALF_LENGTH + 1.5:
             return False
-        if min(abs(p.x - cx) for cx in CRISTA_XS) < CRISTA_T + r + 0.02:
-            return False
+        # Clear of every crista: a body may sit level with a crista only beyond its free rim, with room
+        # for the ATP synthase rows along the rim (~20 nm proud of the membrane).
+        ay, az = CRISTA_AXES
+        for i, cx in enumerate(CRISTA_XS):
+            if abs(p.x - cx) >= CRISTA_T + r + 0.02:
+                continue
+            zc = -(1 if i % 2 == 0 else -1) * CRISTA_OFFSET
+            m = r + 0.45
+            if (p.y / (ay + m)) ** 2 + ((p.z - zc) / (az + m)) ** 2 <= 1:
+                return False
         return all((p - q).length > r + rq + 0.05 for q, rq in placed)
 
     objs = []
@@ -215,6 +223,7 @@ def matrix_contents(inner_r):
             assign(o, mat)
             objs.append(o)
             made += 1
+        print(f"{kind}: placed {made} of {count}")
     return objs
 
 

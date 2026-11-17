@@ -2,7 +2,9 @@ import { useFrame } from '@react-three/fiber';
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { CELL_PARAMS } from '../content/levels';
-import { ACTIN, CELL_LAYOUT, CUT, CUT_FACE, MITO_MODEL_SCALE, MITO_TO_CAPSULE, RIBOSOMES, membraneDistance } from '../engine/anchors';
+import { ACTIN, CELL_LAYOUT, CUT, CUT_FACE, MITO_MODEL_SCALE, MITO_TO_CAPSULE, RIBOSOMES, freeSpace, membraneDistance, type Placed } from '../engine/anchors';
+import { MOTION, cageDiffusion, roughGauss, runStartRate, tickMotion, withJitter, withWobble } from '../engine/motion';
+import { getWorld } from '../engine/world';
 import { sim as physio } from '../sim/client';
 import { getData } from '../engine/data';
 import { cellCut, cutRemoves, nearClip, withCutaway, withPlaneCut, withPocket } from '../engine/pocket';
@@ -61,6 +63,93 @@ const CYTO_CA = new THREE.Color('#ffb15e');
 const FUSE_SECONDS = 0.8; // real time a fusing granule takes on screen
 const MAX_FUSING = 60;
 
+/** Membrane bending per material, in um (illustrative): ER and Golgi most, the nucleus least. */
+const WOBBLE: Record<string, [number, number, number]> = {
+  rough_er: [0.03, 1.5, 6],
+  smooth_er: [0.04, 1.0, 4],
+  golgi: [0.02, 1.2, 7],
+  golgi_vesicle: [0.03, 0.6, 3],
+  membrane: [0.02, 3, 9],
+  nuclear_envelope: [0.008, 3, 12],
+  pores: [0.008, 3, 12],
+  heterochromatin: [0.012, 1.5, 10],
+  nucleolus: [0.012, 2, 10],
+  microtubule: [0.015, 2, 5],
+  cilium: [0.06, 4, 8],
+};
+
+/**
+ * Granules and lysosomes: each sits in a cage (actin mesh) and jitters around a home position; now and then
+ * one is carried along a microtubule at ~1.2 um/s for a second or two (rates: engine/motion.ts), and its home moves with it.
+ * Positions are written straight into the instance matrices' translation; rotation and size stay.
+ */
+class Movers {
+  readonly n: number;
+  readonly offset: Float32Array;
+  readonly dir: Float32Array;
+  readonly runLeft: Float32Array;
+  readonly gone: Uint8Array;
+  constructor(readonly bodies: Placed[]) {
+    this.n = bodies.length;
+    this.offset = new Float32Array(this.n * 3);
+    this.dir = new Float32Array(this.n * 3);
+    this.runLeft = new Float32Array(this.n);
+    this.gone = new Uint8Array(this.n);
+  }
+  step(dt: number, count: number, glucose: number, meshes: THREE.InstancedMesh[]) {
+    const { cageTau, runSpeed, runSeconds } = MOTION;
+    // Ornstein-Uhlenbeck jitter: free diffusion with coefficient D over times shorter than cageTau.
+    const cageSd = Math.sqrt(cageDiffusion(glucose) * cageTau);
+    const decay = Math.exp(-dt / cageTau);
+    const kick = cageSd * Math.sqrt(1 - decay * decay);
+    const startP = runStartRate(glucose) * dt;
+    const v = new THREE.Vector3();
+    const o = this.offset;
+    for (let i = 0; i < count; i++) {
+      if (this.gone[i]) continue;
+      const b = this.bodies[i];
+      const j = i * 3;
+      o[j] = o[j] * decay + kick * roughGauss();
+      o[j + 1] = o[j + 1] * decay + kick * roughGauss();
+      o[j + 2] = o[j + 2] * decay + kick * roughGauss();
+      if (this.runLeft[i] > 0) {
+        v.set(this.dir[j], this.dir[j + 1], this.dir[j + 2]).multiplyScalar(runSpeed * dt).add(b.p);
+        this.runLeft[i] -= dt;
+        if (freeSpace(v, b.s / 2)) b.p.copy(v);
+        else this.runLeft[i] = 0; // reached the membrane or another organelle: the run ends
+      } else if (Math.random() < startP) {
+        v.set(roughGauss(), roughGauss(), roughGauss()).normalize();
+        this.dir[j] = v.x;
+        this.dir[j + 1] = v.y;
+        this.dir[j + 2] = v.z;
+        this.runLeft[i] = runSeconds * (0.5 + Math.random());
+      }
+      for (const mesh of meshes) {
+        const a = mesh.instanceMatrix.array as Float32Array;
+        a[i * 16 + 12] = b.p.x + o[j];
+        a[i * 16 + 13] = b.p.y + o[j + 1];
+        a[i * 16 + 14] = b.p.z + o[j + 2];
+      }
+    }
+    for (const mesh of meshes) mesh.instanceMatrix.needsUpdate = true;
+  }
+  /** Where body i is drawn now. */
+  at(i: number, out: THREE.Vector3): THREE.Vector3 {
+    return out.copy(this.bodies[i].p).add(new THREE.Vector3(this.offset[i * 3], this.offset[i * 3 + 1], this.offset[i * 3 + 2]));
+  }
+}
+
+/** Mitochondria: tethered, they wobble and turn a little in place (illustrative amplitudes). */
+const MITO_HOME = CELL_LAYOUT.mitos.map((m) => ({
+  p: m.p.clone(),
+  q: m.q.clone(),
+  clock: Math.random() * 100,
+  phase: Array.from({ length: 6 }, () => Math.random() * Math.PI * 2),
+  axis: new THREE.Vector3(roughGauss(), roughGauss(), roughGauss()).normalize(),
+}));
+const MITO_SHIFT = 0.05; // um
+const MITO_TURN = THREE.MathUtils.degToRad(4);
+
 /** Granules in order of release: nearest the membrane first. The first ones form the releasable pool. */
 const RELEASE_ORDER = (() => {
   const idx = CELL_LAYOUT.granules.map((g, i) => ({ i, d: membraneDistance(g.p).d - g.s / 2 }));
@@ -90,7 +179,8 @@ export function CellScene({ role, hidden, hover }: SceneProps) {
       }
       if (mat.name === 'membrane') membraneMats.push(mat);
       // Organelles are cut away near the camera, like the granules, so a flight through them stays readable.
-      mesh.material = withPlaneCut(withCutaway(mat));
+      const wob = WOBBLE[mat.name];
+      mesh.material = withPlaneCut(wob ? withWobble(withCutaway(mat), ...wob) : withCutaway(mat));
       mesh.raycast = function (raycaster, hits) {
         const mine: THREE.Intersection[] = [];
         THREE.Mesh.prototype.raycast.call(this, raycaster, mine);
@@ -112,8 +202,9 @@ export function CellScene({ role, hidden, hover }: SceneProps) {
       core: cut(new THREE.MeshStandardMaterial({ color: '#e9cf92', roughness: 0.45 })),
       shell: cut(new THREE.MeshStandardMaterial({ color: '#f7f1e3', roughness: 0.3, transparent: true, opacity: 0.4, depthWrite: false })),
       lysosome: cut(new THREE.MeshStandardMaterial({ color: '#9b3b46', roughness: 0.6 })),
-      ribosome: withPlaneCut(new THREE.PointsMaterial({ color: '#2b4f66', size: 0.025, sizeAttenuation: true })),
-      actin: withPlaneCut(new THREE.LineBasicMaterial({ color: '#d9874f', transparent: true, opacity: 0.35 })),
+      // Free ribosomes jitter by ~20 nm; actin filaments flex (illustrative).
+      ribosome: withPlaneCut(withJitter(new THREE.PointsMaterial({ color: '#2b4f66', size: 0.025, sizeAttenuation: true }), 0.02, 1.5)),
+      actin: withPlaneCut(withWobble(new THREE.LineBasicMaterial({ color: '#d9874f', transparent: true, opacity: 0.35 }), 0.02, 0.8, 3)),
     };
   }, []);
 
@@ -144,6 +235,53 @@ export function CellScene({ role, hidden, hover }: SceneProps) {
   // Granule release, driven by the model: each whole granule the model releases is taken from the
   // releasable pool (nearest the membrane), moved onto the membrane, and fades out as it fuses.
   const fusion = useMemo(() => ({ next: 0, releasedSeen: 0, lastT: -1, active: [] as { i: number; start: number; from: THREE.Vector3; to: THREE.Vector3 }[] }), []);
+  const granuleMoves = useMemo(() => new Movers(CELL_LAYOUT.granules), []);
+  const lysoMoves = useMemo(() => new Movers(CELL_LAYOUT.lysosomes), []);
+  const hiddenRef = useRef(hidden);
+  hiddenRef.current = hidden;
+
+  // Movement (real time). Runs before the release animation below, which then owns the fusing granules.
+  useFrame((_, delta) => {
+    if (!getSim().motion) return;
+    const dt = Math.min(delta, 0.05);
+    tickMotion(dt);
+    const glucose = physio.latest?.glucose ?? 5;
+    const count = getSim().sparseGranules ? Math.floor(CELL_LAYOUT.granules.length / 10) : CELL_LAYOUT.granules.length;
+    granuleMoves.step(dt, count, glucose, [granuleRef.current!, shellRef.current!]);
+    lysoMoves.step(dt, CELL_LAYOUT.lysosomes.length, glucose, [lysoRef.current!]);
+
+    // Mitochondria. The one being zoomed into (or drawn in detail) holds still, so it stays where its
+    // detailed model is placed; its own clock stops too, so it does not jump when released.
+    const w = getWorld();
+    const frozen = new Set<number>();
+    if (hiddenRef.current != null) frozen.add(hiddenRef.current);
+    if (w.level === 'cell' && w.focus) frozen.add(w.focus.index);
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const s = new THREE.Vector3();
+    const turn = new THREE.Quaternion();
+    CELL_LAYOUT.mitos.forEach((mito, i) => {
+      const h = MITO_HOME[i];
+      if (!frozen.has(i)) {
+        h.clock += dt;
+        const t = h.clock, f = h.phase;
+        mito.p.set(
+          h.p.x + MITO_SHIFT * Math.sin(0.9 * t + f[0]),
+          h.p.y + MITO_SHIFT * Math.sin(0.7 * t + f[1]),
+          h.p.z + MITO_SHIFT * Math.sin(1.1 * t + f[2]),
+        );
+        turn.setFromAxisAngle(h.axis, MITO_TURN * Math.sin(0.4 * t + f[3]));
+        mito.q.copy(h.q).premultiply(turn);
+      }
+      s.setScalar(i === hiddenRef.current ? 0 : MITO_MODEL_SCALE);
+      m.compose(mito.p, q.copy(mito.q).multiply(MITO_TO_CAPSULE), s);
+      mitoRef.current!.setMatrixAt(i, m);
+      mitoInnerRef.current!.setMatrixAt(i, m);
+    });
+    mitoRef.current!.instanceMatrix.needsUpdate = true;
+    mitoInnerRef.current!.instanceMatrix.needsUpdate = true;
+  });
+
   useFrame((state) => {
     const snap = physio.latest;
     if (!snap) return;
@@ -165,6 +303,7 @@ export function CellScene({ role, hidden, hover }: SceneProps) {
         core.setMatrixAt(i, m);
         shell.setMatrixAt(i, m);
       });
+      granuleMoves.gone.fill(0);
       fusion.next = 0;
       fusion.releasedSeen = 0;
       fusion.active.length = 0;
@@ -176,13 +315,15 @@ export function CellScene({ role, hidden, hover }: SceneProps) {
     for (; start > 0 && fusion.next < RELEASE_ORDER.length; start--) {
       const i = RELEASE_ORDER[fusion.next++];
       const g = CELL_LAYOUT.granules[i];
+      granuleMoves.gone[i] = 1; // the release animation owns it from here
       if (fusion.active.length >= MAX_FUSING) {
         core.setMatrixAt(i, m.makeScale(0, 0, 0));
         shell.setMatrixAt(i, m);
         continue;
       }
       const { d, n } = membraneDistance(g.p);
-      fusion.active.push({ i, start: now, from: g.p.clone(), to: g.p.clone().addScaledVector(n, Math.max(0, d - g.s / 2 - 0.02)) });
+      const from = granuleMoves.at(i, new THREE.Vector3());
+      fusion.active.push({ i, start: now, from, to: from.clone().addScaledVector(n, Math.max(0, d - g.s / 2 - 0.02)) });
     }
     fusion.active = fusion.active.filter((f) => {
       const g = CELL_LAYOUT.granules[f.i];

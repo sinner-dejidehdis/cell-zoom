@@ -5,6 +5,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { makeAnchor } from '../engine/anchors';
 import { getData } from '../engine/data';
 import { contextDetail } from '../engine/pocket';
+import { getSim } from '../engine/store';
 import type { SceneProps } from './types';
 import { fixTransparency } from './util';
 
@@ -31,12 +32,34 @@ export function MitochondrionScene({ role, hidden, hover }: SceneProps) {
     fixTransparency(s);
     return s;
   }, [mito]);
+  // Nucleoids and mitoribosomes drift a few nanometres around where they were placed (illustrative):
+  // the matrix is crowded and most mitoribosomes are tethered to the inner membrane.
+  const drifters = useMemo(() => {
+    const out: { o: THREE.Object3D; home: THREE.Vector3; amp: number; phase: number[] }[] = [];
+    model.traverse((o) => {
+      const amp = o.name.startsWith('Nucleoid') ? 0.06 : o.name.startsWith('Mitoribosome') ? 0.1 : 0;
+      if (amp) out.push({ o, home: o.position.clone(), amp, phase: Array.from({ length: 3 }, () => Math.random() * 6.283) });
+    });
+    return out;
+  }, [model]);
+  const clock = useRef(0);
   const geometry = useMemo(proxyGeometry, []);
   const anchors = useMemo(() => mitoSites.map((_, i) => makeAnchor('mitochondrion', i, new THREE.Vector3())), [mitoSites]);
 
   const ref = useRef<THREE.InstancedMesh>(null);
   const markerRef = useRef<THREE.Points>(null);
-  useFrame(() => {
+  useFrame((_, delta) => {
+    if (getSim().motion) {
+      const t = (clock.current += Math.min(delta, 0.05));
+      for (const d of drifters) {
+        const [a, b, c] = d.phase;
+        d.o.position.set(
+          d.home.x + d.amp * Math.sin(1.3 * t + a),
+          d.home.y + d.amp * Math.sin(1.1 * t + b),
+          d.home.z + d.amp * Math.sin(1.7 * t + c),
+        );
+      }
+    }
     if (ref.current) ref.current.visible = role !== 'parent' || contextDetail.showNeighbours;
   });
 
