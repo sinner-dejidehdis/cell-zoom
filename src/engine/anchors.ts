@@ -35,6 +35,16 @@ const MEMBRANE_MARGIN = 0.25;
 function insideCell(p: THREE.Vector3, reach: number): boolean {
   return PLANES.every(({ n, d }) => n.dot(p) <= d - reach - MEMBRANE_MARGIN);
 }
+/** Distance from p to the nearest membrane face (positive inside), and that face's outward normal. */
+export function membraneDistance(p: THREE.Vector3): { d: number; n: THREE.Vector3 } {
+  let best = { d: Infinity, n: PLANES[0].n };
+  for (const { n, d } of PLANES) {
+    const gap = d - n.dot(p);
+    if (gap < best.d) best = { d: gap, n };
+  }
+  return best;
+}
+
 function clearOfNucleus(p: THREE.Vector3, reach: number): boolean {
   const q = p.clone().sub(NUCLEUS);
   const m = 0.08 + reach; // the envelope and its pores stand a little proud of the ellipsoid

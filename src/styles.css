@@ -123,3 +123,35 @@ html, body, #root { margin: 0; height: 100%; overflow: hidden; background: var(-
   transform: translate(14px, -14px);
 }
 .atom-label.strong { color: #fff3c4; border-color: rgba(242, 201, 76, 0.6); }
+
+/* ---- physiology panel ---- */
+.physio {
+  position: absolute; left: 170px; top: 56px; width: 330px; z-index: 3;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+  font-size: 12.5px; color: var(--text);
+}
+.physio header { display: flex; align-items: baseline; gap: 8px; }
+.physio-sub { color: var(--muted); font-size: 11px; }
+.physio-toggle { background: none; border: 1px solid var(--line); color: var(--text); border-radius: 4px; width: 20px; height: 20px; line-height: 1; cursor: pointer; padding: 0; }
+.physio .glucose { display: flex; align-items: center; gap: 8px; margin: 10px 0 6px; }
+.physio .glucose input { flex: 1; min-width: 0; }
+.physio .glucose b { width: 64px; text-align: right; font-variant-numeric: tabular-nums; }
+.physio-controls { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.physio-controls button { background: rgba(255,255,255,0.08); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; font-size: 12px; cursor: pointer; }
+.physio-controls button.on { background: rgba(127, 200, 255, 0.28); }
+.physio-time { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.chain { display: grid; gap: 5px; }
+.chain-row { display: grid; grid-template-columns: 128px 1fr 74px; grid-template-rows: auto auto; column-gap: 8px; align-items: center; }
+.chain-label { white-space: nowrap; }
+.chain-bar { height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
+.chain-bar span { display: block; height: 100%; background: linear-gradient(90deg, #7fc8ff, #ffb86b); }
+.chain-value { text-align: right; font-variant-numeric: tabular-nums; }
+.chain-value small { color: var(--muted); }
+.chain-note { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
+.trace { margin-top: 8px; }
+.trace canvas { width: 100%; height: 70px; background: rgba(0,0,0,0.25); border-radius: 4px; display: block; }
+.trace-legend { display: flex; gap: 10px; font-size: 11px; color: var(--muted); margin-top: 3px; }
+.trace-legend .lv::before, .trace-legend .lc::before { content: ''; display: inline-block; width: 10px; height: 3px; margin-right: 4px; vertical-align: middle; }
+.trace-legend .lv::before { background: #7fc8ff; }
+.trace-legend .lc::before { background: #ffb86b; }
+.physio.closed { width: auto; }

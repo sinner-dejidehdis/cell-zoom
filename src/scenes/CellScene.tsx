@@ -2,7 +2,8 @@ import { useFrame } from '@react-three/fiber';
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { CELL_PARAMS } from '../content/levels';
-import { ACTIN, CELL_LAYOUT, CUT, CUT_FACE, MITO_MODEL_SCALE, MITO_TO_CAPSULE, RIBOSOMES } from '../engine/anchors';
+import { ACTIN, CELL_LAYOUT, CUT, CUT_FACE, MITO_MODEL_SCALE, MITO_TO_CAPSULE, RIBOSOMES, membraneDistance } from '../engine/anchors';
+import { sim as physio } from '../sim/client';
 import { getData } from '../engine/data';
 import { cellCut, cutRemoves, nearClip, withCutaway, withPlaneCut, withPocket } from '../engine/pocket';
 import { getSim, useSim } from '../engine/store';
@@ -53,7 +54,22 @@ function ribosomeTexture(): THREE.Texture {
   return t;
 }
 
+const MEMBRANE_REST = new THREE.Color(0.62, 0.78, 0.86);
+const MEMBRANE_FIRING = new THREE.Color(1.0, 0.5, 0.42);
+const CYTO_REST = new THREE.Color('#f2e6b8');
+const CYTO_CA = new THREE.Color('#ffb15e');
+const FUSE_SECONDS = 0.8; // real time a fusing granule takes on screen
+const MAX_FUSING = 60;
+
+/** Granules in order of release: nearest the membrane first. The first ones form the releasable pool. */
+const RELEASE_ORDER = (() => {
+  const idx = CELL_LAYOUT.granules.map((g, i) => ({ i, d: membraneDistance(g.p).d - g.s / 2 }));
+  idx.sort((a, b) => a.d - b.d);
+  return idx.map((x) => x.i);
+})();
+
 export function CellScene({ role, hidden, hover }: SceneProps) {
+  const membraneMats = useMemo<THREE.MeshStandardMaterial[]>(() => [], []);
   const model = useMemo(() => {
     const s = getData().cell.clone(true);
     fixTransparency(s);
@@ -72,6 +88,7 @@ export function CellScene({ role, hidden, hover }: SceneProps) {
         mat.map.repeat.set(250, 125); // the envelope's UVs run once around ~17 um and once pole to pole
         mat.map.needsUpdate = true;
       }
+      if (mat.name === 'membrane') membraneMats.push(mat);
       // Organelles are cut away near the camera, like the granules, so a flight through them stays readable.
       mesh.material = withPlaneCut(withCutaway(mat));
       mesh.raycast = function (raycaster, hits) {
@@ -81,7 +98,7 @@ export function CellScene({ role, hidden, hover }: SceneProps) {
       };
     });
     return s;
-  }, []);
+  }, [membraneMats]);
 
   const sim = useSim();
   const granuleCount = sim.sparseGranules ? Math.floor(CELL_LAYOUT.granules.length / 10) : CELL_LAYOUT.granules.length;
@@ -123,6 +140,70 @@ export function CellScene({ role, hidden, hover }: SceneProps) {
 
   // The cut plane, carried into world coordinates (the cell may be drawn as context around a deeper level).
   const plane = useMemo(() => new THREE.Plane(), []);
+  const cytoRef = useRef<THREE.MeshBasicMaterial>(null);
+  // Granule release, driven by the model: each whole granule the model releases is taken from the
+  // releasable pool (nearest the membrane), moved onto the membrane, and fades out as it fuses.
+  const fusion = useMemo(() => ({ next: 0, releasedSeen: 0, lastT: -1, active: [] as { i: number; start: number; from: THREE.Vector3; to: THREE.Vector3 }[] }), []);
+  useFrame((state) => {
+    const snap = physio.latest;
+    if (!snap) return;
+    const k = THREE.MathUtils.clamp((snap.vmaxTick + 65) / 65, 0, 1);
+    for (const m of membraneMats) m.color.copy(MEMBRANE_REST).lerp(MEMBRANE_FIRING, k);
+    if (cytoRef.current) {
+      const c = THREE.MathUtils.clamp((snap.camMaxTick - 0.04) / 0.6, 0, 1);
+      cytoRef.current.color.copy(CYTO_REST).lerp(CYTO_CA, c);
+      cytoRef.current.opacity = 0.14 + 0.16 * c;
+    }
+    const now = state.clock.elapsedTime;
+    const core = granuleRef.current!, shell = shellRef.current!;
+    const m = new THREE.Matrix4();
+    const v = new THREE.Vector3();
+    if (snap.t < fusion.lastT) {
+      // The model was reset: put every granule back.
+      CELL_LAYOUT.granules.forEach(({ p, q, s }, i) => {
+        m.compose(p, q, v.setScalar(s));
+        core.setMatrixAt(i, m);
+        shell.setMatrixAt(i, m);
+      });
+      fusion.next = 0;
+      fusion.releasedSeen = 0;
+      fusion.active.length = 0;
+    }
+    fusion.lastT = snap.t;
+    const whole = Math.floor(snap.released);
+    let start = whole - fusion.releasedSeen;
+    fusion.releasedSeen = whole;
+    for (; start > 0 && fusion.next < RELEASE_ORDER.length; start--) {
+      const i = RELEASE_ORDER[fusion.next++];
+      const g = CELL_LAYOUT.granules[i];
+      if (fusion.active.length >= MAX_FUSING) {
+        core.setMatrixAt(i, m.makeScale(0, 0, 0));
+        shell.setMatrixAt(i, m);
+        continue;
+      }
+      const { d, n } = membraneDistance(g.p);
+      fusion.active.push({ i, start: now, from: g.p.clone(), to: g.p.clone().addScaledVector(n, Math.max(0, d - g.s / 2 - 0.02)) });
+    }
+    fusion.active = fusion.active.filter((f) => {
+      const g = CELL_LAYOUT.granules[f.i];
+      const u = (now - f.start) / FUSE_SECONDS;
+      if (u >= 1) {
+        core.setMatrixAt(f.i, m.makeScale(0, 0, 0));
+        shell.setMatrixAt(f.i, m);
+        return false;
+      }
+      const move = THREE.MathUtils.smoothstep(u, 0, 0.6);
+      const fade = 1 - THREE.MathUtils.smoothstep(u, 0.6, 1);
+      v.copy(f.from).lerp(f.to, move);
+      m.compose(v, g.q, new THREE.Vector3().setScalar(g.s * fade));
+      core.setMatrixAt(f.i, m);
+      m.compose(v, g.q, new THREE.Vector3().setScalar(g.s * (1 + 0.6 * (1 - fade))));
+      shell.setMatrixAt(f.i, m);
+      return true;
+    });
+    core.instanceMatrix.needsUpdate = true;
+    shell.instanceMatrix.needsUpdate = true;
+  });
   useFrame(() => {
     const g = groupRef.current;
     if (!g || !getSim().cutaway) {
@@ -190,7 +271,7 @@ export function CellScene({ role, hidden, hover }: SceneProps) {
       {cutOn && (
         <group raycast={noRaycast}>
           <mesh geometry={cutFace.fill} raycast={noRaycast} renderOrder={2}>
-            <meshBasicMaterial color="#f2e6b8" transparent opacity={0.14} depthWrite={false} side={THREE.DoubleSide} />
+            <meshBasicMaterial ref={cytoRef} color="#f2e6b8" transparent opacity={0.14} depthWrite={false} side={THREE.DoubleSide} />
           </mesh>
           <lineLoop geometry={cutFace.rim} raycast={noRaycast}>
             <lineBasicMaterial color="#9fd0e4" />

@@ -9,6 +9,7 @@ import { domRefs, setSim, useSim } from './engine/store';
 import { World } from './engine/World';
 import { initWorld, useWorld } from './engine/world';
 import { levelText, ui } from './i18n';
+import { PhysioPanel } from './sim/PhysioPanel';
 
 export default function App() {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>({ done: 0, total: 1 });
@@ -143,6 +144,7 @@ function Viewer() {
         <span ref={(el) => { domRefs.scaleLabel = el; }} />
       </div>
 
+      <PhysioPanel />
       <InfoPanel level={level} />
       <div className="badge">{ui.prototype}</div>
     </div>
