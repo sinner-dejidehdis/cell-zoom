@@ -7,9 +7,11 @@ export interface MuscleView {
   /** Both ends held: the model's own condition (no shortening). Off: the fibre is drawn shortening (illustrative). */
   isometric: boolean;
   panelOpen: boolean;
+  /** Camera preset requested from the interface; the rig flies there and clears it. */
+  preset: 'overview' | 'myofibrils' | 'filaments' | null;
 }
 
-let state: MuscleView = { cut: true, isometric: false, panelOpen: true };
+let state: MuscleView = { cut: true, isometric: false, panelOpen: true, preset: null };
 const listeners = new Set<() => void>();
 
 export const getMuscleView = () => state;

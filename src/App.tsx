@@ -46,7 +46,7 @@ function Viewer({ tabs }: { tabs?: React.ReactNode }) {
   useEffect(() => replaceHash(level), [level]);
   useEffect(() => {
     const onHash = () => {
-      if (window.location.hash.startsWith('#muscle')) return; // another cell type: Root switches page
+      if (window.location.hash.startsWith('#muscle') || window.location.hash.startsWith('#neuron')) return; // another cell type: Root switches page
       flyTo(parseHash(window.location.hash));
     };
     window.addEventListener('hashchange', onHash);

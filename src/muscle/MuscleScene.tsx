@@ -1,5 +1,5 @@
 import { Html } from '@react-three/drei';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { muscle } from '../sim/muscle/client';
@@ -175,6 +175,7 @@ export function MuscleScene() {
   const fiber = useMemo(buildFiber, []);
   const groupRef = useRef<THREE.Group>(null);
   const caSRRest = useRef<number | null>(null);
+  const controls = useThree((st) => st.controls) as unknown as { target: THREE.Vector3 } | null;
   useFrame((state) => {
     const s = muscle.latest;
     const view = getMuscleView();
@@ -190,7 +191,14 @@ export function MuscleScene() {
     fiberU.uAttached.value = 0.35 * f; // illustrative share of heads attached at full force
     // Volume is kept: a fibre that shortens gets thicker.
     const sx = sl / FIBER.slRest;
-    groupRef.current?.scale.set(sx, 1 / Math.sqrt(sx), 1 / Math.sqrt(sx));
+    const sy = 1 / Math.sqrt(sx);
+    const g = groupRef.current;
+    if (g) {
+      g.scale.set(sx, sy, sy);
+      // Shorten about the point being looked at, so a close-up stays on its filaments.
+      const p = controls?.target ?? new THREE.Vector3();
+      g.position.set(p.x * (1 - sx), p.y * (1 - sy), p.z * (1 - sy));
+    }
     const dep = THREE.MathUtils.clamp((s.v + 82) / 100, 0, 1);
     fiber.memMat.color.copy(MEM_REST).lerp(MEM_FIRE, dep);
     fiber.memMat.opacity = 0.28 + 0.3 * dep;

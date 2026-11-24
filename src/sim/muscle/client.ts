@@ -11,6 +11,7 @@ let worker: Worker | null = null;
 
 export function startMuscle(): void {
   if (worker) return;
+  (window as unknown as { __muscle: unknown }).__muscle = muscle; // for automated checks
   worker = new MuscleWorker();
   worker.onmessage = (e: MessageEvent<MuscleSnapshot>) => {
     const snap = e.data;

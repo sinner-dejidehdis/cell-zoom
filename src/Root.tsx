@@ -2,14 +2,19 @@
 import { useEffect, useState } from 'react';
 import App from './App';
 import { MuscleApp } from './muscle/MuscleApp';
+import { NeuronApp } from './neuron/NeuronApp';
 
-type CellType = 'beta' | 'muscle';
+type CellType = 'beta' | 'muscle' | 'neuron';
 const TYPES: { id: CellType; label: string; hash: string }[] = [
   { id: 'beta', label: 'β 细胞 · 胰岛素分泌', hash: '#cell' },
   { id: 'muscle', label: '骨骼肌纤维 · 收缩', hash: '#muscle' },
+  { id: 'neuron', label: '神经元 · 突触与放电', hash: '#neuron' },
 ];
 
-const typeOf = (hash: string): CellType => (hash.replace('#', '').split('/')[0] === 'muscle' ? 'muscle' : 'beta');
+const typeOf = (hash: string): CellType => {
+  const h = hash.replace('#', '').split('/')[0];
+  return h === 'muscle' || h === 'neuron' ? h : 'beta';
+};
 
 export default function Root() {
   const [type, setType] = useState<CellType>(() => typeOf(window.location.hash));
@@ -23,8 +28,9 @@ export default function Root() {
       {TYPES.map((t) => (
         <a key={t.id} href={t.hash} className={t.id === type ? 'current' : ''}>{t.label}</a>
       ))}
-      <span className="soon" title="正在制作">神经元 · 放电（制作中）</span>
     </nav>
   );
-  return type === 'muscle' ? <MuscleApp tabs={tabs} /> : <App tabs={tabs} />;
+  if (type === 'muscle') return <MuscleApp tabs={tabs} />;
+  if (type === 'neuron') return <NeuronApp tabs={tabs} />;
+  return <App tabs={tabs} />;
 }

@@ -4,6 +4,7 @@ import { TextPanel } from '../engine/InfoPanel';
 import { levelText, ui } from '../i18n';
 import { MusclePanel } from './MusclePanel';
 import { MuscleScene } from './MuscleScene';
+import { CameraRig } from './CameraRig';
 import { setMuscleView, useMuscleView } from './store';
 
 export function MuscleApp({ tabs }: { tabs: React.ReactNode }) {
@@ -18,6 +19,7 @@ export function MuscleApp({ tabs }: { tabs: React.ReactNode }) {
           <directionalLight position={[5, 8, 6]} intensity={1.6} />
           <directionalLight position={[-6, -3, -4]} intensity={0.45} color="#9ec5ff" />
           <MuscleScene />
+          <CameraRig />
           <OrbitControls makeDefault zoomToCursor minDistance={0.15} maxDistance={400} target={[0, 0, 0]} />
         </Canvas>
       </div>
@@ -31,6 +33,9 @@ export function MuscleApp({ tabs }: { tabs: React.ReactNode }) {
       <div className="hint">
         <span>{t.hint}</span>
         <span className="sim-controls">
+          <button onClick={() => setMuscleView({ preset: 'overview' })}>全貌</button>
+          <button onClick={() => setMuscleView({ preset: 'myofibrils' })}>看肌原纤维</button>
+          <button onClick={() => setMuscleView({ preset: 'filaments' })}>看肌丝和横桥</button>
           <label>
             <input type="checkbox" checked={view.cut} onChange={(e) => setMuscleView({ cut: e.target.checked })} />
             剖开肌纤维

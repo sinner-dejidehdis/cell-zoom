@@ -98,11 +98,13 @@ export function fiberMaterial<T extends THREE.Material>(material: T, opts: { sar
           float hs = 0.5 * uSL;
           float thick = step(hs - ${(FIBER.thick / 2).toFixed(3)}, d);  // inside the A band
           float thin = step(d, ${FIBER.thin.toFixed(3)});                 // reached by thin filaments
-          float shade = mix(1.0, 0.42, thick * thin);   // overlap: darkest
-          shade = mix(shade, 0.62, thick * (1.0 - thin)); // H zone
-          shade *= 1.0 - 0.55 * (1.0 - step(0.035, d));   // Z-disc
-          shade *= 1.0 - 0.35 * (1.0 - step(0.025, abs(d - hs))); // M-line
-          diffuseColor.rgb *= shade;
+          // Stain-like colours: pale I band, dark A band (darkest where filaments overlap), lighter H zone.
+          vec3 col = vec3(0.95, 0.80, 0.74);                       // I band
+          col = mix(col, vec3(0.55, 0.13, 0.12), thick * thin);    // A band, overlap
+          col = mix(col, vec3(0.74, 0.30, 0.26), thick * (1.0 - thin)); // H zone
+          col = mix(col, vec3(0.20, 0.07, 0.07), 1.0 - step(0.035, d));  // Z-disc
+          col = mix(col, vec3(0.40, 0.10, 0.10), 1.0 - step(0.025, abs(d - hs))); // M-line
+          diffuseColor.rgb = col;
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0, 0.62, 0.25), 0.25 * uCa);
         }`,
       );
