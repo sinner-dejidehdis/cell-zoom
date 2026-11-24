@@ -1,95 +1,76 @@
-import { OrbitControls } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
-import { Suspense, useCallback, useEffect, useRef, type ComponentType } from 'react';
-import type * as THREE from 'three';
-import { LEVELS, pathTo, type LevelId, type SceneKind } from './content/levels';
-import { CameraRig, type Entry, type RigApi } from './engine/CameraRig';
+import { useEffect, useState } from 'react';
+import { LEVELS, ORDER, pathTo, type LevelId } from './content/levels';
+import { Controller, flyTo, ladderFraction, view } from './engine/Controller';
+import { loadAll } from './engine/data';
 import { InfoPanel } from './engine/InfoPanel';
-import { hrefFor, navigate, useLevel } from './engine/route';
-import { ScaleProbe } from './engine/ScaleProbe';
+import { hrefFor, parseHash, replaceHash } from './engine/route';
 import { domRefs, setSim, useSim } from './engine/store';
+import { World } from './engine/World';
+import { initWorld, useWorld } from './engine/world';
 import { levelText, ui } from './i18n';
-import { AtpSynthaseScene } from './scenes/AtpSynthaseScene';
-import { CatalyticSiteScene } from './scenes/CatalyticSiteScene';
-import { CellScene } from './scenes/CellScene';
-import { MitochondrionScene } from './scenes/MitochondrionScene';
-import type { SceneProps } from './scenes/types';
+import { PhysioPanel } from './sim/PhysioPanel';
 
-const SCENES: Record<SceneKind, ComponentType<SceneProps>> = {
-  cell: CellScene,
-  mitochondrion: MitochondrionScene,
-  'atp-synthase': AtpSynthaseScene,
-  'catalytic-site': CatalyticSiteScene,
-};
-
-function entryFor(prev: LevelId | null, next: LevelId): Entry {
-  if (!prev || prev === next) return 'direct';
-  if (LEVELS[next].parent === prev) return 'from-parent';
-  if (pathTo(prev).includes(next)) return 'from-child';
-  return 'direct';
-}
-
-export default function App() {
-  const level = useLevel();
-  const def = LEVELS[level];
-  const prevLevel = useRef<LevelId | null>(null);
-  const entry = useRef<Entry>('direct');
-  if (prevLevel.current !== level) {
-    entry.current = entryFor(prevLevel.current, level);
-    prevLevel.current = level;
-  }
-  const rig = useRef<RigApi | null>(null);
-  const busy = useRef(false);
+export default function App({ tabs }: { tabs?: React.ReactNode }) {
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>({ done: 0, total: 1 });
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    busy.current = false;
-    document.body.style.cursor = '';
-  }, [level]);
-
-  const goTo = useCallback((target: LevelId) => {
-    if (busy.current || target === level) return;
-    busy.current = true;
-    if (rig.current) rig.current.flyOut(() => navigate(target));
-    else navigate(target);
-  }, [level]);
-
-  const onZoom = useCallback((child: LevelId, point: THREE.Vector3) => {
-    if (busy.current) return;
-    busy.current = true;
-    if (rig.current) rig.current.flyInto(point, () => navigate(child));
-    else navigate(child);
+    loadAll((done, total) => setProgress({ done, total }))
+      .then(() => {
+        initWorld(parseHash(window.location.hash));
+        setProgress(null);
+      })
+      .catch((e: unknown) => setError(String(e)));
   }, []);
 
-  const Scene = SCENES[def.scene];
+  if (error) return <div className="loading">加载失败：{error}</div>;
+  if (progress) {
+    return (
+      <div className="loading">
+        <span>{ui.loading}</span>
+        <div className="loading-bar"><div style={{ width: `${(progress.done / progress.total) * 100}%` }} /></div>
+      </div>
+    );
+  }
+  return <Viewer tabs={tabs} />;
+}
+
+function Viewer({ tabs }: { tabs?: React.ReactNode }) {
+  const w = useWorld();
+  const level = w.level;
+  const def = LEVELS[level];
   const text = levelText(def.textKey);
   const crumbs = pathTo(level);
   const sim = useSim();
 
+  useEffect(() => replaceHash(level), [level]);
+  useEffect(() => {
+    const onHash = () => {
+      if (window.location.hash.startsWith('#muscle') || window.location.hash.startsWith('#neuron')) return; // another cell type: Root switches page
+      flyTo(parseHash(window.location.hash));
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  const zoomBy = (logFactor: number) => {
+    view.pivot.copy(view.target);
+    view.autopilot = null;
+    view.pendingZoom += logFactor;
+  };
+
   return (
     <div className="app">
       <div className="stage">
-      <Canvas camera={{ fov: 40 }} dpr={[1, 2]}>
-        <color attach="background" args={['#0d1420']} />
-        <ambientLight intensity={0.55} />
-        <directionalLight position={[5, 8, 6]} intensity={1.6} />
-        <directionalLight position={[-6, -3, -4]} intensity={0.45} color="#9ec5ff" />
-        <OrbitControls
-          key={level}
-          makeDefault
-          enablePan={false}
-          minDistance={def.homeDistance * 0.25}
-          maxDistance={def.homeDistance * 2.5}
-        />
-        <Suspense fallback={null}>
-          <group key={level}>
-            <Scene onZoom={onZoom} />
-            <CameraRig homeDistance={def.homeDistance} entry={entry.current} apiRef={rig} />
-            <ScaleProbe metersPerUnit={def.metersPerUnit} />
-          </group>
-        </Suspense>
-      </Canvas>
+        <Canvas camera={{ fov: 40 }} dpr={[1, 2]} gl={{ logarithmicDepthBuffer: true, antialias: true }}>
+          <color attach="background" args={['#0d1420']} />
+          <ambientLight intensity={0.55} />
+          <directionalLight position={[5, 8, 6]} intensity={1.6} />
+          <directionalLight position={[-6, -3, -4]} intensity={0.45} color="#9ec5ff" />
+          <World />
+          <Controller />
+        </Canvas>
       </div>
-
-      <div className="fade" ref={(el) => { domRefs.overlay = el; }} />
 
       <header className="top">
         <div className="brand">
@@ -105,7 +86,7 @@ export default function App() {
                 {id === level ? (
                   <span className="current">{name}</span>
                 ) : (
-                  <a href={hrefFor(id)} onClick={(e) => { e.preventDefault(); goTo(id); }}>
+                  <a href={hrefFor(id)} onClick={(e) => { e.preventDefault(); flyTo(id); }}>
                     {name}
                   </a>
                 )}
@@ -115,14 +96,43 @@ export default function App() {
         </nav>
       </header>
 
+      {tabs}
+      <Ladder level={level} />
+
+      <div className="notice" ref={(el) => { domRefs.notice = el; }}>{ui.noDeeper}</div>
+
       <div className="hint">
+        <span className="zoom-buttons">
+          <button onClick={() => zoomBy(-0.7)} aria-label={ui.zoomIn}>＋</button>
+          <button onClick={() => zoomBy(0.7)} aria-label={ui.zoomOut}>－</button>
+        </span>
         {def.parent && (
-          <button className="back" onClick={() => goTo(def.parent!)}>
+          <button className="back" onClick={() => flyTo(def.parent!)}>
             ← {ui.back}
           </button>
         )}
         <span>{text.hint}</span>
-        {level === 'atp-synthase' && (
+        {level === 'cell' && (
+          <span className="sim-controls">
+            <label>
+              <input
+                type="checkbox"
+                checked={sim.sparseGranules}
+                onChange={(e) => setSim({ sparseGranules: e.target.checked })}
+              />
+              只显示 1/10 的胰岛素颗粒
+            </label>
+            <label>
+              <input type="checkbox" checked={sim.cutaway} onChange={(e) => setSim({ cutaway: e.target.checked })} />
+              剖开细胞
+            </label>
+            <label>
+              <input type="checkbox" checked={sim.motion} onChange={(e) => setSim({ motion: e.target.checked })} />
+              细胞器运动
+            </label>
+          </span>
+        )}
+        {(level === 'atp-synthase' || level === 'catalytic-site') && (
           <span className="sim-controls">
             <button onClick={() => setSim({ playing: !sim.playing })}>{sim.playing ? '暂停旋转' : '继续旋转'}</button>
             <label>
@@ -142,8 +152,42 @@ export default function App() {
         <span ref={(el) => { domRefs.scaleLabel = el; }} />
       </div>
 
-      <InfoPanel key={level} level={level} />
+      <PhysioPanel />
+      <InfoPanel level={level} />
       <div className="badge">{ui.prototype}</div>
     </div>
   );
+}
+
+/** Every level on one logarithmic ruler, with a marker for how wide the current view is. */
+function Ladder({ level }: { level: LevelId }) {
+  return (
+    <div className="ladder" aria-label={ui.ladder}>
+      <div className="ladder-rail" />
+      {ORDER.map((id) => {
+        const L = LEVELS[id];
+        return (
+          <button
+            key={id}
+            className={id === level ? 'rung current' : 'rung'}
+            style={{ top: `${ladderFraction(L.sizeMeters) * 100}%` }}
+            onClick={() => flyTo(id)}
+          >
+            <span className="rung-name">{levelText(L.textKey).name}</span>
+            <span className="rung-size">{formatSize(L.sizeMeters)}</span>
+          </button>
+        );
+      })}
+      <div className="ladder-marker" ref={(el) => { domRefs.ladderMarker = el; }}>
+        <span className="ladder-marker-label">
+          {ui.viewWidth} <span ref={(el) => { domRefs.ladderLabel = el; }} />
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function formatSize(m: number): string {
+  if (m >= 1e-6) return `${+(m / 1e-6).toPrecision(2)} µm`;
+  return `${+(m / 1e-9).toPrecision(2)} nm`;
 }

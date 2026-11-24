@@ -4,9 +4,17 @@ import { useSyncExternalStore } from 'react';
 export interface SimState {
   playing: boolean;
   showInhibitor: boolean;
+  /** Whether the info panel is open; the 3D view shifts left so nothing is hidden behind it. */
+  panelOpen: boolean;
+  /** Draw only one in ten insulin granules, to see past them. */
+  sparseGranules: boolean;
+  /** Cut the cell open with a plane, like a textbook drawing, to show the inside. */
+  cutaway: boolean;
+  /** Organelles and particles move (real time). */
+  motion: boolean;
 }
 
-let state: SimState = { playing: true, showInhibitor: false };
+let state: SimState = { playing: true, showInhibitor: false, panelOpen: true, sparseGranules: false, cutaway: true, motion: true };
 const listeners = new Set<() => void>();
 
 export function getSim(): SimState {
@@ -30,7 +38,9 @@ export function useSim(): SimState {
 
 // DOM nodes the render loop writes to directly, so per-frame updates do not re-render React.
 export const domRefs: {
-  overlay: HTMLDivElement | null;
   scaleBar: HTMLDivElement | null;
   scaleLabel: HTMLSpanElement | null;
-} = { overlay: null, scaleBar: null, scaleLabel: null };
+  notice: HTMLDivElement | null;
+  ladderMarker: HTMLDivElement | null;
+  ladderLabel: HTMLSpanElement | null;
+} = { scaleBar: null, scaleLabel: null, notice: null, ladderMarker: null, ladderLabel: null };

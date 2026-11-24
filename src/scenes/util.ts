@@ -2,6 +2,18 @@ import * as THREE from 'three';
 
 export const BASE = import.meta.env.BASE_URL;
 
+declare global {
+  interface Window {
+    /** Optional map from asset path to URL, for hosts that cannot serve binary files (e.g. a single-page embed). */
+    __CELL_ZOOM_ASSETS__?: Record<string, string>;
+  }
+}
+
+/** URL of a file under public/, e.g. asset('models/cell.glb'). */
+export function asset(path: string): string {
+  return window.__CELL_ZOOM_ASSETS__?.[path] ?? BASE + path;
+}
+
 /** Deterministic random numbers, so the cell looks the same on every visit. */
 export function rng(seed: number): () => number {
   let a = seed >>> 0;
@@ -35,14 +47,9 @@ export function fixTransparency(root: THREE.Object3D): void {
       if (m.transparent) {
         m.depthWrite = false;
         m.side = THREE.DoubleSide;
+        // Zooming aims through see-through shells at what lies behind them.
+        mesh.userData.noPivot = true;
       }
     }
   });
-}
-
-/** World position of one instance of an InstancedMesh. */
-export function instanceWorldPosition(mesh: THREE.InstancedMesh, id: number): THREE.Vector3 {
-  const m = new THREE.Matrix4();
-  mesh.getMatrixAt(id, m);
-  return new THREE.Vector3().setFromMatrixPosition(m).applyMatrix4(mesh.matrixWorld);
 }

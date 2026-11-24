@@ -8,6 +8,7 @@
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
   color: var(--text);
   background: var(--bg);
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -15,11 +16,46 @@ html, body, #root { margin: 0; height: 100%; overflow: hidden; background: var(-
 
 .app { position: relative; width: 100%; height: 100%; }
 .app canvas { display: block; }
-.stage { position: absolute; top: 0; left: 0; bottom: 0; right: 400px; }
-@media (max-width: 900px) { .stage { right: 0; } }
+.stage { position: absolute; inset: 0; touch-action: none; }
 
-.fade {
-  position: absolute; inset: 0; background: var(--bg); opacity: 1; pointer-events: none;
+.loading {
+  position: absolute; inset: 0; display: flex; flex-direction: column; gap: 12px;
+  align-items: center; justify-content: center; color: var(--muted); font-size: 14px;
+}
+.loading-bar { width: 220px; height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.loading-bar div { height: 100%; background: var(--accent); transition: width 0.2s; }
+
+.notice {
+  position: absolute; left: 50%; top: 72px; transform: translateX(-50%); padding: 8px 14px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; font-size: 13px;
+  opacity: 0; transition: opacity 0.3s; pointer-events: none;
+}
+
+.ladder {
+  position: absolute; left: 18px; top: 120px; bottom: 120px; width: 170px; font-size: 12px;
+  pointer-events: none; text-shadow: 0 1px 3px #000, 0 0 6px #000;
+}
+.ladder-rail { position: absolute; left: 5px; top: 0; bottom: 0; width: 2px; background: var(--line); }
+.rung {
+  position: absolute; left: 0; transform: translateY(-50%); display: flex; gap: 8px; align-items: baseline;
+  background: none; border: none; padding: 2px 0 2px 16px; color: var(--muted); font: inherit; cursor: pointer;
+  pointer-events: auto; white-space: nowrap;
+}
+.rung::before {
+  content: ''; position: absolute; left: 1px; top: 50%; width: 10px; height: 10px; margin-top: -5px;
+  border-radius: 50%; background: var(--bg); border: 2px solid var(--muted);
+}
+.rung:hover { color: var(--text); }
+.rung.current { color: var(--text); font-weight: 600; }
+.rung.current::before { border-color: var(--accent); background: var(--accent); }
+.rung-size { font-weight: 400; opacity: 0.8; }
+.ladder-marker {
+  position: absolute; left: -4px; width: 20px; height: 2px; background: var(--accent);
+  transform: translateY(-1px);
+}
+.ladder-marker-label {
+  position: absolute; left: 24px; top: -9px; color: var(--accent); white-space: nowrap;
+  transform: translateY(14px); font-size: 11px;
 }
 
 .top {
@@ -39,21 +75,24 @@ html, body, #root { margin: 0; height: 100%; overflow: hidden; background: var(-
 
 .hint {
   position: absolute; left: 18px; bottom: 18px; display: flex; gap: 14px; align-items: center;
-  flex-wrap: wrap; font-size: 14px; color: var(--muted); max-width: calc(100% - 420px);
+  flex-wrap: wrap; font-size: 14px; color: var(--text); max-width: calc(100% - 440px);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px;
 }
 .hint button, .sim-controls button {
   background: rgba(255, 255, 255, 0.08); color: var(--text); border: 1px solid var(--line);
   border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer;
 }
 .hint button:hover { background: rgba(255, 255, 255, 0.16); }
+.zoom-buttons { display: inline-flex; gap: 4px; }
+.zoom-buttons button { width: 32px; padding: 6px 0; font-size: 15px; }
 .sim-controls { display: inline-flex; gap: 12px; align-items: center; color: var(--text); }
 .sim-controls label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
 
 .scale {
   position: absolute; left: 18px; top: 64px; display: flex; flex-direction: column; gap: 4px;
-  font-size: 12px; color: var(--muted);
+  font-size: 12px; color: var(--text); text-shadow: 0 1px 3px #000, 0 0 6px #000;
 }
-.scale-bar { height: 6px; border: 2px solid var(--text); border-top: none; width: 100px; }
+.scale-bar { height: 6px; border: 2px solid var(--text); border-top: none; width: 100px; filter: drop-shadow(0 1px 2px #000); }
 
 .panel {
   position: absolute; top: 56px; right: 14px; bottom: 14px; width: 380px;
@@ -75,7 +114,7 @@ html, body, #root { margin: 0; height: 100%; overflow: hidden; background: var(-
 .panel .simplified li { color: #d6c9a8; }
 
 .badge {
-  position: absolute; left: 18px; bottom: 52px; font-size: 11px; color: var(--muted); opacity: 0.8;
+  position: absolute; right: 460px; top: 50px; text-shadow: 0 1px 3px #000; font-size: 11px; color: var(--muted); opacity: 0.8;
 }
 
 .atom-label {
@@ -84,3 +123,54 @@ html, body, #root { margin: 0; height: 100%; overflow: hidden; background: var(-
   transform: translate(14px, -14px);
 }
 .atom-label.strong { color: #fff3c4; border-color: rgba(242, 201, 76, 0.6); }
+
+/* ---- physiology panel ---- */
+.physio {
+  position: absolute; left: 170px; top: 56px; width: 330px; z-index: 3;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+  font-size: 12.5px; color: var(--text);
+}
+.physio header { display: flex; align-items: baseline; gap: 8px; }
+.physio-sub { color: var(--muted); font-size: 11px; }
+.physio-toggle { background: none; border: 1px solid var(--line); color: var(--text); border-radius: 4px; width: 20px; height: 20px; line-height: 1; cursor: pointer; padding: 0; }
+.physio .glucose { display: flex; align-items: center; gap: 8px; margin: 10px 0 6px; }
+.physio .glucose input { flex: 1; min-width: 0; }
+.physio .glucose b { width: 64px; text-align: right; font-variant-numeric: tabular-nums; }
+.physio-controls { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.physio-controls button { background: rgba(255,255,255,0.08); color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; font-size: 12px; cursor: pointer; }
+.physio-controls button.on { background: rgba(127, 200, 255, 0.28); }
+.physio-time { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.chain { display: grid; gap: 5px; }
+.chain-row { display: grid; grid-template-columns: 128px 1fr 74px; grid-template-rows: auto auto; column-gap: 8px; align-items: center; }
+.chain-label { white-space: nowrap; }
+.chain-bar { height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
+.chain-bar span { display: block; height: 100%; background: linear-gradient(90deg, #7fc8ff, #ffb86b); }
+.chain-value { text-align: right; font-variant-numeric: tabular-nums; }
+.chain-value small { color: var(--muted); }
+.chain-note { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
+.trace { margin-top: 8px; }
+.trace canvas { width: 100%; height: 70px; background: rgba(0,0,0,0.25); border-radius: 4px; display: block; }
+.trace-legend { display: flex; gap: 10px; font-size: 11px; color: var(--muted); margin-top: 3px; }
+.trace-legend .lv::before, .trace-legend .lc::before { content: ''; display: inline-block; width: 10px; height: 3px; margin-right: 4px; vertical-align: middle; }
+.trace-legend .lv::before { background: #7fc8ff; }
+.trace-legend .lc::before { background: #ffb86b; }
+.physio.closed { width: auto; }
+
+/* ---- cell type tabs ---- */
+.celltypes {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-30%); z-index: 4;
+  display: flex; gap: 4px; padding: 3px; border-radius: 8px;
+  background: var(--panel); border: 1px solid var(--line); font-size: 12.5px;
+}
+.celltypes a, .celltypes .soon { padding: 4px 10px; border-radius: 6px; color: var(--text); text-decoration: none; white-space: nowrap; }
+.celltypes a:hover { background: rgba(255,255,255,0.08); }
+.celltypes a.current { background: rgba(127, 200, 255, 0.28); }
+.celltypes .soon { color: var(--muted); }
+.physio-controls button.primary { background: rgba(255, 107, 107, 0.35); }
+.scene-label {
+  white-space: nowrap; font-size: 12px; color: #fff3c4; background: rgba(13, 20, 32, 0.8);
+  border: 1px solid rgba(242, 201, 76, 0.6); border-radius: 4px; padding: 2px 7px; pointer-events: none;
+}
+.physio-slider { display: grid; grid-template-columns: 9.5em 1fr 4.2em; gap: 6px; align-items: center; margin-bottom: 6px; font-size: 12px; }
+.physio-slider input { width: 100%; min-width: 0; }
+.physio-slider b { font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; }

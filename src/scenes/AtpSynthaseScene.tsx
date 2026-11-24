@@ -1,27 +1,12 @@
 import { useFrame } from '@react-three/fiber';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
+import { anchorCenters } from '../engine/anchors';
+import { getData, type Structure } from '../engine/data';
+import { inPocket, withPocket } from '../engine/pocket';
 import { getSim, useSim } from '../engine/store';
 import type { SceneProps } from './types';
-import { BASE } from './util';
 
-interface Meta {
-  pdbId: string;
-  atomCount: number;
-  elements: string[];
-  chains: { id: string; subunit: string }[];
-  groups: Record<'stator' | 'rotor' | 'inhibitor' | 'ligand', number>;
-  site: { chain: string; position: [number, number, number] };
-  axis: { origin: [number, number, number]; direction: [number, number, number] };
-}
-
-interface Structure {
-  meta: Meta;
-  pos: Float32Array;
-  element: Uint8Array;
-  chain: Uint8Array;
-  group: Uint8Array;
-}
 
 // Van der Waals radii in angstrom (Bondi), for the space-filling view.
 const VDW: Record<string, number> = { C: 1.7, N: 1.55, O: 1.52, S: 1.8, P: 1.8, MG: 1.73 };
@@ -40,31 +25,33 @@ const ELEMENT_SHADE: Record<string, number> = { C: 1.0, N: 0.82, O: 0.9, S: 1.15
 const STEP_SECONDS = 1.6; // one 120 degree step, demo speed
 const STEP_MOVE = 0.35;   // fraction of a step spent turning; the rest is the dwell
 
-async function load(): Promise<Structure> {
-  const [meta, bin] = await Promise.all([
-    fetch(`${BASE}data/atp-synthase.json`).then((r) => r.json() as Promise<Meta>),
-    fetch(`${BASE}data/atp-synthase.bin`).then((r) => r.arrayBuffer()),
-  ]);
-  const n = meta.atomCount;
-  return {
-    meta,
-    pos: new Float32Array(bin, 0, n * 3),
-    element: new Uint8Array(bin, n * 12, n),
-    chain: new Uint8Array(bin, n * 13, n),
-    group: new Uint8Array(bin, n * 14, n),
-  };
-}
-
+/**
+ * Space-filling atoms, drawn as instanced spheres. `origin` is subtracted from every atom position.
+ * Ray casting tests the atom spheres directly (fast enough for 39,000 atoms; a triangle test is not),
+ * and skips atoms that the pocket around the catalytic site is hiding.
+ */
 function AtomCloud({ s, indices, origin }: { s: Structure; indices: number[]; origin: THREE.Vector3 }) {
   const ref = useRef<THREE.InstancedMesh>(null);
+  const local = useMemo(() => {
+    const centres = new Float32Array(indices.length * 3);
+    const radii = new Float32Array(indices.length);
+    indices.forEach((a, i) => {
+      centres[i * 3] = s.pos[a * 3] - origin.x;
+      centres[i * 3 + 1] = s.pos[a * 3 + 1] - origin.y;
+      centres[i * 3 + 2] = s.pos[a * 3 + 2] - origin.z;
+      radii[i] = VDW[s.meta.elements[s.element[a]]] ?? 1.7;
+    });
+    return { centres, radii };
+  }, [s, indices, origin]);
+
   useLayoutEffect(() => {
     const mesh = ref.current!;
     const m = new THREE.Matrix4();
     const c = new THREE.Color();
     indices.forEach((a, i) => {
       const el = s.meta.elements[s.element[a]];
-      const r = VDW[el] ?? 1.7;
-      m.makeScale(r, r, r).setPosition(s.pos[a * 3] - origin.x, s.pos[a * 3 + 1] - origin.y, s.pos[a * 3 + 2] - origin.z);
+      const r = local.radii[i];
+      m.makeScale(r, r, r).setPosition(local.centres[i * 3], local.centres[i * 3 + 1], local.centres[i * 3 + 2]);
       mesh.setMatrixAt(i, m);
       const isLigand = s.group[a] === s.meta.groups.ligand;
       const subunit = s.meta.chains[s.chain[a]].subunit;
@@ -75,24 +62,53 @@ function AtomCloud({ s, indices, origin }: { s: Structure; indices: number[]; or
     mesh.instanceMatrix.needsUpdate = true;
     mesh.instanceColor!.needsUpdate = true;
     mesh.computeBoundingSphere();
-  }, [s, indices, origin]);
+  }, [s, indices, local]);
+
+  const material = useMemo(() => withPocket(new THREE.MeshStandardMaterial({ roughness: 0.55 })), []);
+
+  const raycast = useMemo(() => {
+    const inv = new THREE.Matrix4();
+    const ray = new THREE.Ray();
+    const toC = new THREE.Vector3();
+    return function (this: THREE.InstancedMesh, raycaster: THREE.Raycaster, hits: THREE.Intersection[]) {
+      inv.copy(this.matrixWorld).invert();
+      ray.copy(raycaster.ray).applyMatrix4(inv);
+      const { centres, radii } = local;
+      let best = Infinity;
+      let bestI = -1;
+      const scratch = new THREE.Vector3();
+      for (let i = 0; i < radii.length; i++) {
+        toC.set(centres[i * 3] - ray.origin.x, centres[i * 3 + 1] - ray.origin.y, centres[i * 3 + 2] - ray.origin.z);
+        const tc = toC.dot(ray.direction);
+        if (tc < 0) continue;
+        const d2 = toC.lengthSq() - tc * tc;
+        const r = radii[i];
+        if (d2 > r * r) continue;
+        const t = tc - Math.sqrt(r * r - d2);
+        if (t <= 0 || t >= best) continue;
+        scratch.set(centres[i * 3], centres[i * 3 + 1], centres[i * 3 + 2]).applyMatrix4(this.matrixWorld);
+        if (inPocket(scratch)) continue;
+        best = t;
+        bestI = i;
+      }
+      if (bestI < 0) return;
+      const point = ray.at(best, new THREE.Vector3()).applyMatrix4(this.matrixWorld);
+      hits.push({ distance: point.distanceTo(raycaster.ray.origin), point, object: this, instanceId: bestI } as THREE.Intersection);
+    };
+  }, [local]);
+
   return (
-    <instancedMesh ref={ref} args={[undefined, undefined, indices.length]} raycast={() => null}>
+    <instancedMesh ref={ref} args={[undefined, material, indices.length]} raycast={raycast}>
       <icosahedronGeometry args={[1, 1]} />
-      <meshStandardMaterial roughness={0.55} />
     </instancedMesh>
   );
 }
 
-export function AtpSynthaseScene({ onZoom }: SceneProps) {
-  const [s, setS] = useState<Structure | null>(null);
+export function AtpSynthaseScene({ role, hidden, hover }: SceneProps) {
+  const s = getData().atp;
   const sim = useSim();
-  useEffect(() => {
-    load().then(setS);
-  }, []);
 
   const parts = useMemo(() => {
-    if (!s) return null;
     const stator: number[] = [];
     const rotor: number[] = [];
     const inhibitor: number[] = [];
@@ -102,67 +118,43 @@ export function AtpSynthaseScene({ onZoom }: SceneProps) {
       else if (g === s.meta.groups.inhibitor) inhibitor.push(a);
       else stator.push(a);
     }
-    const axisOrigin = new THREE.Vector3(...s.meta.axis.origin);
-    const axisDir = new THREE.Vector3(...s.meta.axis.direction).normalize();
-    // Stand the enzyme up: membrane part at the bottom, F1 head on top.
-    const align = new THREE.Quaternion().setFromUnitVectors(axisDir, new THREE.Vector3(0, 1, 0));
-    return { stator, rotor, inhibitor, axisOrigin, axisDir, align, site: new THREE.Vector3(...s.meta.site.position) };
+    return { stator, rotor, inhibitor };
   }, [s]);
 
   const rotorRef = useRef<THREE.Group>(null);
   const turn = useRef(0); // seconds of animation time accumulated while playing
   useFrame((_, dt) => {
-    if (!parts || !rotorRef.current) return;
-    if (getSim().playing) turn.current += dt;
+    if (!rotorRef.current) return;
+    if (getSim().playing && role !== 'child') turn.current += Math.min(dt, 0.1);
     const step = Math.floor(turn.current / STEP_SECONDS);
     const frac = Math.min(1, (turn.current / STEP_SECONDS - step) / STEP_MOVE);
     const eased = frac * frac * (3 - 2 * frac);
     // Positive angle about the c-ring -> head axis: clockwise seen from the membrane, the ATP-synthesis direction.
     const angle = ((step + eased) * 2 * Math.PI) / 3;
-    rotorRef.current.quaternion.setFromAxisAngle(parts.axisDir, angle);
+    rotorRef.current.quaternion.setFromAxisAngle(s.axisDir, angle);
   });
 
-  const zero = useMemo(() => new THREE.Vector3(), []);
-  const siteRef = useRef<THREE.Mesh>(null);
-  const [hover, setHover] = useState(false);
+  const site = anchorCenters('atp-synthase')[0];
+  const showBeacon = role === 'current' && hidden !== 0;
 
-  if (!s || !parts) return null;
-
+  // Own frame: c-ring centre at the origin, rotation axis along +Y (see anchors.ts).
   return (
-    <group quaternion={parts.align}>
-      <AtomCloud s={s} indices={parts.stator} origin={zero} />
-      {sim.showInhibitor && <AtomCloud s={s} indices={parts.inhibitor} origin={zero} />}
-      <group position={parts.axisOrigin}>
+    <group>
+      <group quaternion={s.align}>
+        <AtomCloud s={s} indices={parts.stator} origin={s.axisOrigin} />
+        {sim.showInhibitor && <AtomCloud s={s} indices={parts.inhibitor} origin={s.axisOrigin} />}
         <group ref={rotorRef}>
-          <AtomCloud s={s} indices={parts.rotor} origin={parts.axisOrigin} />
+          <AtomCloud s={s} indices={parts.rotor} origin={s.axisOrigin} />
         </group>
       </group>
-      <mesh
-        ref={siteRef}
-        position={parts.site}
-        renderOrder={10}
-        onPointerOver={(e) => {
-          e.stopPropagation();
-          setHover(true);
-          document.body.style.cursor = 'pointer';
-        }}
-        onPointerOut={() => {
-          setHover(false);
-          document.body.style.cursor = '';
-        }}
-        onClick={(e) => {
-          e.stopPropagation();
-          document.body.style.cursor = '';
-          onZoom('catalytic-site', siteRef.current!.getWorldPosition(new THREE.Vector3()));
-        }}
-      >
+      <mesh position={site} renderOrder={10} visible={showBeacon} userData={{ anchorLevel: 'atp-synthase', anchorIndex: 0, pivotPriority: true }}>
         <sphereGeometry args={[9, 24, 16]} />
         <meshStandardMaterial
           color="#7dffb0"
           emissive="#3dff8a"
-          emissiveIntensity={hover ? 1.2 : 0.6}
+          emissiveIntensity={hover === 0 ? 1.2 : 0.6}
           transparent
-          opacity={hover ? 0.75 : 0.45}
+          opacity={hover === 0 ? 0.75 : 0.45}
           depthWrite={false}
           depthTest={false}
         />

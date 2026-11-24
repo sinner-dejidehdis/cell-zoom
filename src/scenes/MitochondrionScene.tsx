@@ -1,89 +1,112 @@
-import { useGLTF } from '@react-three/drei';
-import type { ThreeEvent } from '@react-three/fiber';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useFrame } from '@react-three/fiber';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { makeAnchor } from '../engine/anchors';
+import { getData } from '../engine/data';
+import { contextDetail } from '../engine/pocket';
+import { getSim } from '../engine/store';
 import type { SceneProps } from './types';
-import { BASE, fixTransparency, instanceWorldPosition } from './util';
-
-interface Site {
-  crista: number;
-  position: [number, number, number];
-  normal: [number, number, number];
-}
+import { fixTransparency } from './util';
 
 const SITE_COLOR = new THREE.Color('#f4f7ff');
 const SITE_HOVER = new THREE.Color('#7dffb0');
 
-export function MitochondrionScene({ onZoom }: SceneProps) {
-  const gltf = useGLTF(`${BASE}models/mitochondrion.glb`);
+/**
+ * A stand-in for one ATP synthase at its true size, in angstrom, measured from PDB 8H9S:
+ * membrane part about 9 nm across around the c-ring, a central stalk, and the F1 head about 10 nm
+ * across whose centre is about 13.5 nm from the c-ring centre. Origin = c-ring centre, axis = +Y.
+ * It is placed with the same matrix as the full atomic model, so the two line up exactly.
+ */
+function proxyGeometry(): THREE.BufferGeometry {
+  const base = new THREE.CylinderGeometry(45, 45, 40, 20);
+  const stalk = new THREE.CylinderGeometry(12, 12, 70, 8).translate(0, 55, 0);
+  const head = new THREE.SphereGeometry(50, 16, 12).translate(0, 135, 0);
+  return mergeGeometries([base, stalk, head].map((x) => x.toNonIndexed()));
+}
+
+export function MitochondrionScene({ role, hidden, hover }: SceneProps) {
+  const { mito, mitoSites } = getData();
   const model = useMemo(() => {
-    const s = gltf.scene.clone(true);
+    const s = mito.clone(true);
     fixTransparency(s);
     return s;
-  }, [gltf]);
-
-  const [sites, setSites] = useState<Site[]>([]);
-  useEffect(() => {
-    fetch(`${BASE}models/mitochondrion-sites.json`)
-      .then((r) => r.json())
-      .then((d: { sites: Site[] }) => setSites(d.sites));
-  }, []);
+  }, [mito]);
+  // Nucleoids and mitoribosomes drift a few nanometres around where they were placed (illustrative):
+  // the matrix is crowded and most mitoribosomes are tethered to the inner membrane.
+  const drifters = useMemo(() => {
+    const out: { o: THREE.Object3D; home: THREE.Vector3; amp: number; phase: number[] }[] = [];
+    model.traverse((o) => {
+      const amp = o.name.startsWith('Nucleoid') ? 0.06 : o.name.startsWith('Mitoribosome') ? 0.1 : 0;
+      if (amp) out.push({ o, home: o.position.clone(), amp, phase: Array.from({ length: 3 }, () => Math.random() * 6.283) });
+    });
+    return out;
+  }, [model]);
+  const clock = useRef(0);
+  const geometry = useMemo(proxyGeometry, []);
+  const anchors = useMemo(() => mitoSites.map((_, i) => makeAnchor('mitochondrion', i, new THREE.Vector3())), [mitoSites]);
 
   const ref = useRef<THREE.InstancedMesh>(null);
-  const hovered = useRef(-1);
+  const markerRef = useRef<THREE.Points>(null);
+  useFrame((_, delta) => {
+    if (getSim().motion) {
+      const t = (clock.current += Math.min(delta, 0.05));
+      for (const d of drifters) {
+        const [a, b, c] = d.phase;
+        d.o.position.set(
+          d.home.x + d.amp * Math.sin(1.3 * t + a),
+          d.home.y + d.amp * Math.sin(1.1 * t + b),
+          d.home.z + d.amp * Math.sin(1.7 * t + c),
+        );
+      }
+    }
+    if (ref.current) ref.current.visible = role !== 'parent' || contextDetail.showNeighbours;
+  });
+
+  // The proxies are only a few pixels across at this level's resting view, so each also gets a
+  // fixed-size dot. The dot marks where an enzyme is; it says nothing about its size.
+  const markerGeometry = useMemo(() => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(anchors.flatMap((a) => {
+      const head = new THREE.Vector3(0, 135, 0).applyMatrix4(a.matrix);
+      return [head.x, head.y, head.z];
+    }), 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(anchors.length * 3).fill(1), 3));
+    return g;
+  }, [anchors]);
 
   useLayoutEffect(() => {
-    const mesh = ref.current;
-    if (!mesh || sites.length === 0) return;
-    const m = new THREE.Matrix4();
-    const q = new THREE.Quaternion();
-    sites.forEach((s, i) => {
-      // The F1 head points into the matrix, away from the crista membrane.
-      q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(...s.normal));
-      m.compose(new THREE.Vector3(...s.position), q, new THREE.Vector3(1, 1, 1));
-      mesh.setMatrixAt(i, m);
-      mesh.setColorAt(i, SITE_COLOR);
-    });
-    mesh.instanceMatrix.needsUpdate = true;
-    mesh.instanceColor!.needsUpdate = true;
-  }, [sites]);
-
-  const setHover = (id: number) => {
     const mesh = ref.current!;
-    if (hovered.current >= 0) mesh.setColorAt(hovered.current, SITE_COLOR);
-    if (id >= 0) mesh.setColorAt(id, SITE_HOVER);
-    hovered.current = id;
+    const gone = new THREE.Matrix4().makeScale(0, 0, 0);
+    anchors.forEach((a, i) => mesh.setMatrixAt(i, i === hidden ? gone : a.matrix));
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+  }, [anchors, hidden]);
+
+  useLayoutEffect(() => {
+    const mesh = ref.current!;
+    const colors = markerGeometry.getAttribute('color') as THREE.BufferAttribute;
+    anchors.forEach((_, i) => {
+      const c = role === 'current' && i === hover ? SITE_HOVER : SITE_COLOR;
+      mesh.setColorAt(i, c);
+      if (i === hidden) colors.setXYZ(i, 0, 0, 0);
+      else colors.setXYZ(i, c.r, c.g, c.b);
+    });
     mesh.instanceColor!.needsUpdate = true;
-    document.body.style.cursor = id >= 0 ? 'pointer' : '';
-  };
+    colors.needsUpdate = true;
+  }, [anchors, hover, role, hidden, markerGeometry]);
 
   return (
     <group>
       <primitive object={model} />
-      {sites.length > 0 && (
-        <instancedMesh
-          key={sites.length}
-          ref={ref}
-          args={[undefined, undefined, sites.length]}
-          onPointerMove={(e: ThreeEvent<PointerEvent>) => {
-            e.stopPropagation();
-            if (e.instanceId !== undefined && e.instanceId !== hovered.current) setHover(e.instanceId);
-          }}
-          onPointerOut={() => setHover(-1)}
-          onClick={(e: ThreeEvent<MouseEvent>) => {
-            e.stopPropagation();
-            if (e.instanceId === undefined) return;
-            setHover(-1);
-            onZoom('atp-synthase', instanceWorldPosition(ref.current!, e.instanceId));
-          }}
-        >
-          {/* A marker roughly the size of the F1 head (drawn ~1.5x larger so it can be clicked). */}
-          <sphereGeometry args={[0.09, 12, 8]} />
-          <meshStandardMaterial emissive="#ffffff" emissiveIntensity={0.25} roughness={0.4} />
-        </instancedMesh>
+      <instancedMesh ref={ref} args={[geometry, undefined, anchors.length]} userData={{ anchorLevel: 'mitochondrion' }}>
+        <meshStandardMaterial emissive="#ffffff" emissiveIntensity={0.25} roughness={0.4} />
+      </instancedMesh>
+      {role !== 'parent' && (
+        <points ref={markerRef} geometry={markerGeometry} raycast={() => null} renderOrder={5}>
+          <pointsMaterial size={6} sizeAttenuation={false} vertexColors transparent opacity={0.9} depthWrite={false} blending={THREE.AdditiveBlending} />
+        </points>
       )}
     </group>
   );
 }
-
-useGLTF.preload(`${BASE}models/mitochondrion.glb`);
