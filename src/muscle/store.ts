@@ -1,9 +1,6 @@
 // View switches for the muscle page.
 import { useSyncExternalStore } from 'react';
 
-/** Which level of detail the camera is at (set by the scene). */
-export type MuscleLevel = 'fiber' | 'myofibril' | 'molecule' | 'atom';
-
 export interface MuscleView {
   /** Open a wedge of the fibre to show the inside. */
   cut: boolean;
@@ -11,11 +8,10 @@ export interface MuscleView {
   isometric: boolean;
   panelOpen: boolean;
   /** Camera preset requested from the interface; the rig flies there and clears it. */
-  preset: 'overview' | 'myofibrils' | 'filaments' | 'molecules' | 'atoms' | null;
-  level: MuscleLevel;
+  preset: 'overview' | 'myofibrils' | 'filaments' | null;
 }
 
-let state: MuscleView = { cut: true, isometric: false, panelOpen: true, preset: null, level: 'fiber' };
+let state: MuscleView = { cut: true, isometric: false, panelOpen: true, preset: null };
 const listeners = new Set<() => void>();
 
 export const getMuscleView = () => state;

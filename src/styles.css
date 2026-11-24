@@ -174,8 +174,3 @@ html, body, #root { margin: 0; height: 100%; overflow: hidden; background: var(-
 .physio-slider { display: grid; grid-template-columns: 9.5em 1fr 4.2em; gap: 6px; align-items: center; margin-bottom: 6px; font-size: 12px; }
 .physio-slider input { width: 100%; min-width: 0; }
 .physio-slider b { font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; }
-.level-badge { position: absolute; left: 50%; transform: translateX(-50%); top: 92px; z-index: 6; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 12px; border-radius: 8px; background: rgba(13, 20, 32, 0.78); border: 1px solid rgba(255, 255, 255, 0.12); color: #e8eef6; font-size: 12px; pointer-events: none; max-width: min(560px, calc(100vw - 32px)); text-align: center; }
-.level-badge strong { font-size: 13px; }
-.level-badge span { color: #aab6c6; }
-.level-badge .legend { display: flex; flex-wrap: wrap; gap: 4px 10px; justify-content: center; color: #d6deea; }
-.level-badge .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }

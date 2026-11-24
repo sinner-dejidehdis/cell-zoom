@@ -40,9 +40,6 @@ export const fiberU = {
   uVT: { value: -82 },
   uAttached: { value: 0 },
   uTime: { value: 0 },
-  /** Box (fibre-local coordinates) where the filaments are drawn as molecules instead: hidden here. */
-  uHoleMin: { value: new THREE.Vector3(1e9, 1e9, 1e9) },
-  uHoleMax: { value: new THREE.Vector3(-1e9, -1e9, -1e9) },
 };
 
 /** Is a point (fibre-local, um) in the opened wedge? The wedge is y > 0 and z > 0, with a small margin. */
@@ -55,12 +52,11 @@ export function inWedge(y: number, z: number, margin = 0): boolean {
  * (sarcomere index k, anchor 0 = Z-disc / 1 = M-line, offset dx in um) are moved along X each frame.
  * `banded` adds the myofibril striation pattern. Everything in the opened wedge is not drawn.
  */
-export function fiberMaterial<T extends THREE.Material>(material: T, opts: { sarc?: boolean; banded?: boolean; heads?: boolean; hole?: boolean; key: string }): T {
+export function fiberMaterial<T extends THREE.Material>(material: T, opts: { sarc?: boolean; banded?: boolean; heads?: boolean; key: string }): T {
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, fiberU);
     const common = `
       uniform float uSL; uniform float uCut; uniform float uCa; uniform float uV; uniform float uVT; uniform float uAttached; uniform float uTime;
-      uniform vec3 uHoleMin; uniform vec3 uHoleMax;
       varying vec3 vFiber;
       ${opts.sarc ? 'attribute vec3 aSarc;' : ''}
       ${opts.heads ? 'attribute vec3 aHead; varying float vAttached;' : ''}
@@ -91,7 +87,7 @@ export function fiberMaterial<T extends THREE.Material>(material: T, opts: { sar
     );
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\n' + common.replace(/attribute [^;]+;/g, ''))
-      .replace('void main() {', `void main() {\n  if (uCut > 0.5 && vFiber.y > 0.0 && vFiber.z > 0.0) discard;${opts.hole ? '\n  if (all(greaterThan(vFiber, uHoleMin)) && all(lessThan(vFiber, uHoleMax))) discard;' : ''}`);
+      .replace('void main() {', `void main() {\n  if (uCut > 0.5 && vFiber.y > 0.0 && vFiber.z > 0.0) discard;`);
     if (opts.banded) {
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <color_fragment>',
@@ -179,11 +175,3 @@ export const LAYOUT: FiberLayout = (() => {
   })).map((n) => ({ ...n, y: Math.cos(n.angle) * (radius - 1.1), z: Math.sin(n.angle) * (radius - 1.1) }));
   return { myofibrils: keep.filter((m) => m !== detailed), detailed, nearCut, gaps, nuclei };
 })();
-
-/** Every myofibril; index 0 is the one shown in detail at the start. */
-export const ALL_FIBRILS = [LAYOUT.detailed, ...LAYOUT.myofibrils];
-
-/** Real axial position (um, fibre-local, before the drawing scale) of a sarcomere anchor. */
-export function anchorX(k: number, anchor: number, sl: number): number {
-  return k * sl + anchor * 0.5 * sl - FIBER.sarcomeres * 0.5 * sl;
-}
