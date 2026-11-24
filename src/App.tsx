@@ -11,7 +11,7 @@ import { initWorld, useWorld } from './engine/world';
 import { levelText, ui } from './i18n';
 import { PhysioPanel } from './sim/PhysioPanel';
 
-export default function App() {
+export default function App({ tabs }: { tabs?: React.ReactNode }) {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>({ done: 0, total: 1 });
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -32,10 +32,10 @@ export default function App() {
       </div>
     );
   }
-  return <Viewer />;
+  return <Viewer tabs={tabs} />;
 }
 
-function Viewer() {
+function Viewer({ tabs }: { tabs?: React.ReactNode }) {
   const w = useWorld();
   const level = w.level;
   const def = LEVELS[level];
@@ -45,7 +45,10 @@ function Viewer() {
 
   useEffect(() => replaceHash(level), [level]);
   useEffect(() => {
-    const onHash = () => flyTo(parseHash(window.location.hash));
+    const onHash = () => {
+      if (window.location.hash.startsWith('#muscle')) return; // another cell type: Root switches page
+      flyTo(parseHash(window.location.hash));
+    };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
@@ -93,6 +96,7 @@ function Viewer() {
         </nav>
       </header>
 
+      {tabs}
       <Ladder level={level} />
 
       <div className="notice" ref={(el) => { domRefs.notice = el; }}>{ui.noDeeper}</div>

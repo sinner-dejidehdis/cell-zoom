@@ -1,11 +1,14 @@
 import { LEVELS, type LevelId } from '../content/levels';
-import { levelText, ui } from '../i18n';
+import { levelText, ui, type LevelText } from '../i18n';
 import { setSim, useSim } from './store';
 
 export function InfoPanel({ level }: { level: LevelId }) {
-  const t = levelText(LEVELS[level].textKey);
   const open = useSim().panelOpen;
-  const setOpen = (v: boolean) => setSim({ panelOpen: v });
+  return <TextPanel t={levelText(LEVELS[level].textKey)} open={open} setOpen={(v) => setSim({ panelOpen: v })} />;
+}
+
+/** The right-hand text panel: what it is, what it does, rules, simplifications, sources. */
+export function TextPanel({ t, open, setOpen }: { t: LevelText; open: boolean; setOpen: (v: boolean) => void }) {
   return (
     <aside className={open ? 'panel' : 'panel closed'}>
       <button className="panel-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>

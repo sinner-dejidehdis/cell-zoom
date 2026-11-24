@@ -114,7 +114,7 @@ html, body, #root { margin: 0; height: 100%; overflow: hidden; background: var(-
 .panel .simplified li { color: #d6c9a8; }
 
 .badge {
-  position: absolute; right: 460px; top: 24px; text-shadow: 0 1px 3px #000; font-size: 11px; color: var(--muted); opacity: 0.8;
+  position: absolute; right: 460px; top: 50px; text-shadow: 0 1px 3px #000; font-size: 11px; color: var(--muted); opacity: 0.8;
 }
 
 .atom-label {
@@ -155,3 +155,19 @@ html, body, #root { margin: 0; height: 100%; overflow: hidden; background: var(-
 .trace-legend .lv::before { background: #7fc8ff; }
 .trace-legend .lc::before { background: #ffb86b; }
 .physio.closed { width: auto; }
+
+/* ---- cell type tabs ---- */
+.celltypes {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-30%); z-index: 4;
+  display: flex; gap: 4px; padding: 3px; border-radius: 8px;
+  background: var(--panel); border: 1px solid var(--line); font-size: 12.5px;
+}
+.celltypes a, .celltypes .soon { padding: 4px 10px; border-radius: 6px; color: var(--text); text-decoration: none; white-space: nowrap; }
+.celltypes a:hover { background: rgba(255,255,255,0.08); }
+.celltypes a.current { background: rgba(127, 200, 255, 0.28); }
+.celltypes .soon { color: var(--muted); }
+.physio-controls button.primary { background: rgba(255, 107, 107, 0.35); }
+.scene-label {
+  white-space: nowrap; font-size: 12px; color: #fff3c4; background: rgba(13, 20, 32, 0.8);
+  border: 1px solid rgba(242, 201, 76, 0.6); border-radius: 4px; padding: 2px 7px; pointer-events: none;
+}
