@@ -208,7 +208,7 @@ export function MuscleScene() {
     fiber.tcMat.color.copy(TC_FULL).lerp(TC_RELEASE, Math.min(1, released * 4));
   });
   return (
-    <group ref={groupRef}>
+    <group ref={groupRef} name="fiber">
       <primitive object={fiber.group} />
       <Html position={fiber.detailedAt} center distanceFactor={60} zIndexRange={[5, 0]}>
         <div className="scene-label">这一根肌原纤维逐根画出了粗、细肌丝，放大看</div>

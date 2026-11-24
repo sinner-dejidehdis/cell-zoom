@@ -5,6 +5,7 @@ import { TextPanel } from '../engine/InfoPanel';
 import { levelText, ui } from '../i18n';
 import { CameraRig, type Presets } from '../muscle/CameraRig';
 import { sendNeuron } from '../sim/neuron/client';
+import { WheelZoom } from '../engine/WheelZoom';
 import { featuredFrame } from './geometry';
 import { NeuronPanel } from './NeuronPanel';
 import { NeuronScene } from './NeuronScene';
@@ -44,7 +45,8 @@ export function NeuronApp({ tabs }: { tabs: React.ReactNode }) {
           <directionalLight position={[-6, -3, -4]} intensity={0.45} color="#9ec5ff" />
           <NeuronScene />
           <CameraRig presets={NEURON_PRESETS} take={take} seconds={2} />
-          <OrbitControls makeDefault zoomToCursor minDistance={0.05} maxDistance={6000} target={o.target.toArray()} />
+          <OrbitControls makeDefault enableZoom={false} target={o.target.toArray()} />
+          <WheelZoom minDistance={0.005} maxDistance={6000} />
         </Canvas>
       </div>
       <header className="top">

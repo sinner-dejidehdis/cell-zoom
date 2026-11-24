@@ -5,7 +5,21 @@ import { levelText, ui } from '../i18n';
 import { MusclePanel } from './MusclePanel';
 import { MuscleScene } from './MuscleScene';
 import { CameraRig } from './CameraRig';
+import { WheelZoom } from '../engine/WheelZoom';
+import { inWedge } from './fiber';
+import { getMuscleView } from './store';
+import * as THREE from 'three';
 import { setMuscleView, useMuscleView } from './store';
+
+/** Ignore hits on parts inside the opened wedge, which are not drawn. */
+function acceptHit(h: THREE.Intersection): boolean {
+  if (!getMuscleView().cut) return true;
+  let g: THREE.Object3D | null = h.object;
+  while (g && g.name !== 'fiber') g = g.parent;
+  if (!g) return true;
+  const p = g.worldToLocal(h.point.clone());
+  return !inWedge(p.y, p.z);
+}
 
 export function MuscleApp({ tabs }: { tabs: React.ReactNode }) {
   const view = useMuscleView();
@@ -20,7 +34,8 @@ export function MuscleApp({ tabs }: { tabs: React.ReactNode }) {
           <directionalLight position={[-6, -3, -4]} intensity={0.45} color="#9ec5ff" />
           <MuscleScene />
           <CameraRig />
-          <OrbitControls makeDefault zoomToCursor minDistance={0.15} maxDistance={400} target={[0, 0, 0]} />
+          <OrbitControls makeDefault enableZoom={false} target={[0, 0, 0]} />
+          <WheelZoom minDistance={0.01} maxDistance={400} accept={acceptHit} />
         </Canvas>
       </div>
       <header className="top">
