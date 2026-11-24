@@ -6,6 +6,7 @@ import { makeAnchor } from '../engine/anchors';
 import { getData } from '../engine/data';
 import { contextDetail } from '../engine/pocket';
 import { getSim } from '../engine/store';
+import { Respirasomes, placeRespirasomes } from './Respirasomes';
 import type { SceneProps } from './types';
 import { fixTransparency } from './util';
 
@@ -41,6 +42,17 @@ export function MitochondrionScene({ role, hidden, hover }: SceneProps) {
       if (amp) out.push({ o, home: o.position.clone(), amp, phase: Array.from({ length: 3 }, () => Math.random() * 6.283) });
     });
     return out;
+  }, [model]);
+  const respirasomes = useMemo(() => {
+    const obstacles: { c: THREE.Vector3; r: number }[] = [];
+    model.updateMatrixWorld(true);
+    model.traverse((o) => {
+      if (!o.name.startsWith('Nucleoid') && !o.name.startsWith('Mitoribosome')) return;
+      const s = new THREE.Box3().setFromObject(o).getBoundingSphere(new THREE.Sphere());
+      // Leave room for the drift (up to 0.1 units, about 5 nm).
+      obstacles.push({ c: s.center, r: s.radius + 0.1 });
+    });
+    return placeRespirasomes(obstacles);
   }, [model]);
   const clock = useRef(0);
   const geometry = useMemo(proxyGeometry, []);
@@ -99,6 +111,7 @@ export function MitochondrionScene({ role, hidden, hover }: SceneProps) {
   return (
     <group>
       <primitive object={model} />
+      <Respirasomes placements={respirasomes} isParent={role === 'parent'} />
       <instancedMesh ref={ref} args={[geometry, undefined, anchors.length]} userData={{ anchorLevel: 'mitochondrion' }}>
         <meshStandardMaterial emissive="#ffffff" emissiveIntensity={0.25} roughness={0.4} />
       </instancedMesh>

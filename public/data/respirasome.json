@@ -1,0 +1,275 @@
+{
+ "pdbId": "5XTH",
+ "source": "Guo et al. 2017, Cell 170:1247, doi:10.1016/j.cell.2017.07.050",
+ "units": "angstrom",
+ "frame": "y = membrane normal towards the matrix; origin = membrane mid-plane",
+ "caveat": "complex IV in this entry is modelled from bovine subunits",
+ "surface": {
+  "grid": 6.0,
+  "sigma": 4.5,
+  "volumePerAtom": 18.0
+ },
+ "bounds": {
+  "min": [
+   -136.9,
+   -66.4,
+   -86.6
+  ],
+  "max": [
+   179.8,
+   157.5,
+   121.8
+  ]
+ },
+ "parts": [
+  {
+   "complex": "I",
+   "atoms": 65595,
+   "vertexOffset": 0,
+   "vertexCount": 4957,
+   "iso": 41.07,
+   "indexOffset": 59484,
+   "indexCount": 29790
+  },
+  {
+   "complex": "III",
+   "atoms": 33208,
+   "vertexOffset": 178644,
+   "vertexCount": 3119,
+   "iso": 39.82,
+   "indexOffset": 216072,
+   "indexCount": 18774
+  },
+  {
+   "complex": "IV",
+   "atoms": 14236,
+   "vertexOffset": 291168,
+   "vertexCount": 1200,
+   "iso": 38.89,
+   "indexOffset": 305568,
+   "indexCount": 7176
+  }
+ ],
+ "cofactors": [
+  {
+   "chain": "A",
+   "type": "FMN",
+   "complex": "I",
+   "xyz": [
+    141.6,
+    122.0,
+    1.6
+   ]
+  },
+  {
+   "chain": "A",
+   "type": "SF4",
+   "complex": "I",
+   "xyz": [
+    136.9,
+    110.5,
+    6.5
+   ]
+  },
+  {
+   "chain": "AC",
+   "type": "FES",
+   "complex": "III",
+   "xyz": [
+    -32.3,
+    -36.1,
+    73.7
+   ]
+  },
+  {
+   "chain": "AH",
+   "type": "HEC",
+   "complex": "III",
+   "xyz": [
+    6.2,
+    -44.2,
+    37.3
+   ]
+  },
+  {
+   "chain": "AJ",
+   "type": "HEM",
+   "complex": "III",
+   "xyz": [
+    1.5,
+    -13.1,
+    48.4
+   ]
+  },
+  {
+   "chain": "AJ",
+   "type": "HEM",
+   "complex": "III",
+   "xyz": [
+    10.4,
+    6.7,
+    44.5
+   ]
+  },
+  {
+   "chain": "AP",
+   "type": "FES",
+   "complex": "III",
+   "xyz": [
+    18.4,
+    -43.9,
+    46.1
+   ]
+  },
+  {
+   "chain": "AU",
+   "type": "HEC",
+   "complex": "III",
+   "xyz": [
+    -20.5,
+    -37.7,
+    82.9
+   ]
+  },
+  {
+   "chain": "AV",
+   "type": "HEM",
+   "complex": "III",
+   "xyz": [
+    -9.0,
+    -10.4,
+    68.2
+   ]
+  },
+  {
+   "chain": "AV",
+   "type": "HEM",
+   "complex": "III",
+   "xyz": [
+    -12.8,
+    11.0,
+    69.3
+   ]
+  },
+  {
+   "chain": "B",
+   "type": "SF4",
+   "complex": "I",
+   "xyz": [
+    126.5,
+    72.6,
+    20.7
+   ]
+  },
+  {
+   "chain": "B",
+   "type": "SF4",
+   "complex": "I",
+   "xyz": [
+    121.9,
+    63.8,
+    15.0
+   ]
+  },
+  {
+   "chain": "C",
+   "type": "SF4",
+   "complex": "I",
+   "xyz": [
+    115.0,
+    53.1,
+    9.9
+   ]
+  },
+  {
+   "chain": "M",
+   "type": "FES",
+   "complex": "I",
+   "xyz": [
+    123.4,
+    105.0,
+    6.0
+   ]
+  },
+  {
+   "chain": "M",
+   "type": "SF4",
+   "complex": "I",
+   "xyz": [
+    127.6,
+    88.9,
+    15.4
+   ]
+  },
+  {
+   "chain": "M",
+   "type": "SF4",
+   "complex": "I",
+   "xyz": [
+    126.7,
+    100.4,
+    18.5
+   ]
+  },
+  {
+   "chain": "O",
+   "type": "FES",
+   "complex": "I",
+   "xyz": [
+    157.2,
+    117.5,
+    8.0
+   ]
+  },
+  {
+   "chain": "x",
+   "type": "CU",
+   "complex": "IV",
+   "xyz": [
+    -95.4,
+    3.7,
+    -2.0
+   ]
+  },
+  {
+   "chain": "x",
+   "type": "HEA",
+   "complex": "IV",
+   "xyz": [
+    -90.5,
+    1.0,
+    -18.1
+   ]
+  },
+  {
+   "chain": "x",
+   "type": "HEA",
+   "complex": "IV",
+   "xyz": [
+    -99.4,
+    6.3,
+    -6.0
+   ]
+  },
+  {
+   "chain": "y",
+   "type": "CU",
+   "complex": "IV",
+   "xyz": [
+    -95.3,
+    -19.2,
+    -6.0
+   ]
+  },
+  {
+   "chain": "y",
+   "type": "CU",
+   "complex": "IV",
+   "xyz": [
+    -95.0,
+    -17.5,
+    -7.6
+   ]
+  }
+ ]
+}
