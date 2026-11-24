@@ -12,6 +12,9 @@ const MUSCLE_PRESETS: Presets = {
   overview: { target: new THREE.Vector3(0, 0, 0), pos: new THREE.Vector3(30, 62, 98) },
   myofibrils: { target: new THREE.Vector3(3, D.y, D.z), pos: new THREE.Vector3(5.5, D.y + 4, D.z + 7) },
   filaments: { target: new THREE.Vector3(3, D.y, D.z + 0.35), pos: new THREE.Vector3(3.25, D.y + 0.25, D.z + 1.7) },
+  // In the A band of the middle sarcomere, where thick and thin filaments overlap, on the cut face.
+  molecules: { target: new THREE.Vector3(1.75, D.y, D.z + 0.44), pos: new THREE.Vector3(1.8, D.y + 0.06, D.z + 0.62) },
+  atoms: { target: new THREE.Vector3(1.75, D.y, D.z + 0.44), pos: new THREE.Vector3(1.76, D.y + 0.012, D.z + 0.475) },
 };
 
 /** Flies the camera to a preset when one is requested. */
